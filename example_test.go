@@ -34,7 +34,7 @@ func ExampleNew() {
 	// true
 }
 
-func ExampleClient_Evaluate() {
+func ExampleClient_Ask() {
 	srv := jsonServer(http.StatusOK, `{
 		"model": "jev-1.13.0",
 		"answers": {
@@ -51,9 +51,9 @@ func ExampleClient_Evaluate() {
 		return
 	}
 
-	resp, err := client.Evaluate(context.Background(), "Help! My payouts have been failing for 3 days.",
+	resp, err := client.Ask(context.Background(), "Help! My payouts have been failing for 3 days.",
 		sys1.Noul("is_urgent", "Does this convey urgency?"),
-		sys1.Choice("team", "Which team should handle this?", sys1.Choices{
+		sys1.Choice("team", "Which team should handle this?", sys1.ChoiceCriteria{
 			"billing":   "Payments, invoicing, refunds",
 			"technical": "Bugs, outages, integrations",
 		}),
@@ -108,7 +108,7 @@ func ExampleClient_Choice() {
 		return
 	}
 
-	answer, err := client.Choice(context.Background(), "Help! My payouts have been failing for 3 days.", "Which team should handle this?", sys1.Choices{
+	answer, err := client.Choice(context.Background(), "Help! My payouts have been failing for 3 days.", "Which team should handle this?", sys1.ChoiceCriteria{
 		"billing":   "Payments, invoicing, refunds",
 		"technical": "Bugs, outages, integrations",
 	})
@@ -189,8 +189,8 @@ func ExampleAnswers_Choice() {
 		return
 	}
 
-	resp, err := client.Evaluate(context.Background(), "state",
-		sys1.Choice("team", "Which team should handle this?", sys1.Choices{"billing": nil, "technical": nil}),
+	resp, err := client.Ask(context.Background(), "state",
+		sys1.Choice("team", "Which team should handle this?", sys1.ChoiceCriteria{"billing": nil, "technical": nil}),
 	)
 	if err != nil {
 		fmt.Println("error:", err)
@@ -218,7 +218,7 @@ func ExampleAPIError() {
 	}
 	client = client.WithRetry(sys1.RetryPolicy{}) // no retries, for a deterministic example
 
-	_, err = client.Evaluate(context.Background(), "state", sys1.Noul("q", "q"))
+	_, err = client.Ask(context.Background(), "state", sys1.Noul("q", "q"))
 
 	var apiErr *sys1.APIError
 	if errors.As(err, &apiErr) {

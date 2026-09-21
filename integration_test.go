@@ -11,7 +11,7 @@ import (
 	sys1 "github.com/robertjndw/gosys1"
 )
 
-// TestIntegration exercises a real TypeSafe account: one Evaluate call
+// TestIntegration exercises a real TypeSafe account: one Ask call
 // covering all three question types, plus one Models call. The
 // integration build tag keeps it out of a plain `go test ./...`, and
 // it skips itself when TYPESAFE_API_KEY is unset, so neither ever
@@ -35,9 +35,9 @@ func TestIntegration(t *testing.T) {
 
 	state := "Help! My payouts have been failing for 3 days."
 
-	resp, err := client.Evaluate(ctx, state,
+	resp, err := client.Ask(ctx, state,
 		sys1.Noul("is_urgent", "Does this convey urgency?"),
-		sys1.Choice("team", "Which team should handle this?", sys1.Choices{
+		sys1.Choice("team", "Which team should handle this?", sys1.ChoiceCriteria{
 			"billing":   "Payments, invoicing, refunds",
 			"technical": "Bugs, outages, integrations",
 			"sales":     "Pricing, upgrades, new accounts",
@@ -45,7 +45,7 @@ func TestIntegration(t *testing.T) {
 		sys1.Score("frustration", "How frustrated is the customer?", sys1.Levels("Calm", "Frustrated", "Very angry")),
 	)
 	if err != nil {
-		t.Fatalf("Evaluate: %v", err)
+		t.Fatalf("Ask: %v", err)
 	}
 	if resp.Model == "" {
 		t.Error("resp.Model is empty")

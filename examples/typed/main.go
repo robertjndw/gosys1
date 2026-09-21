@@ -1,4 +1,4 @@
-// Command typed decodes an Evaluate response into a caller-owned Triage
+// Command typed decodes an Ask response into a caller-owned Triage
 // struct via the typed Answers accessors, so downstream code never touches
 // the answers map directly. It requires TYPESAFE_API_KEY in the environment.
 package main
@@ -42,9 +42,9 @@ func main() {
 	}
 
 	ctx := context.Background()
-	resp, err := client.Evaluate(ctx, "I was charged twice. Please help ASAP.",
+	resp, err := client.Ask(ctx, "I was charged twice. Please help ASAP.",
 		sys1.Noul("billing", "Is this about a billing issue?"),
-		sys1.Choice("tone", "What is the tone of this message?", sys1.Names("calm", "angry")),
+		sys1.Choice("tone", "What is the tone of this message?", sys1.Choices("calm", "angry")),
 		sys1.Score("urgency", "How urgent is this message?", sys1.Levels("low", "medium", "high")),
 	)
 	if err != nil {

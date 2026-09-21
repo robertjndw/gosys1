@@ -24,7 +24,7 @@ func main() {
 
 	ctx := context.Background()
 
-	resp, err := client.Evaluate(ctx, "I was charged twice. Please help ASAP.",
+	resp, err := client.Ask(ctx, "I was charged twice. Please help ASAP.",
 		sys1.Raw("billing", map[string]any{
 			"type":         "noul",
 			"instructions": "About billing?",

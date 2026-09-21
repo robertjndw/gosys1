@@ -96,7 +96,7 @@ func (c *Client) with(mutate func(*Client)) *Client {
 }
 
 // WithModel returns a copy of c that uses name as the default model
-// for Evaluate and the shortcut methods. c itself is unchanged.
+// for Ask and the shortcut methods. c itself is unchanged.
 func (c *Client) WithModel(name string) *Client {
 	return c.with(func(cp *Client) { cp.model = name })
 }
@@ -127,7 +127,7 @@ func (c *Client) WithHeader(key, value string) *Client {
 
 // WithExtraBody returns a copy of c that merges fields into the top
 // level of every request body, for API fields this library predates.
-// state, model and questions are reserved; Evaluate rejects a
+// state, model and questions are reserved; Ask rejects a
 // collision with an error wrapping ErrInvalidRequest rather than
 // letting it shadow the built-in value. c itself is unchanged.
 func (c *Client) WithExtraBody(fields map[string]any) *Client {

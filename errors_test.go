@@ -16,9 +16,9 @@ func TestUnprocessableEntityError(t *testing.T) {
 			]
 		}`, map[string]string{"x-typesafe-request-id": "req-422"})
 	}).WithRetry(RetryPolicy{})
-	_, err := c.Evaluate(context.Background(), "state", Noul("q", "q"))
+	_, err := c.Ask(context.Background(), "state", Noul("q", "q"))
 	if err == nil {
-		t.Fatal("Evaluate() error = nil, want error")
+		t.Fatal("Ask() error = nil, want error")
 	}
 	if !errors.Is(err, ErrUnprocessable) {
 		t.Errorf("error = %v, want ErrUnprocessable", err)

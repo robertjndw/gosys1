@@ -60,19 +60,19 @@ func slogTestLogger(w io.Writer) *slog.Logger {
 	return slog.New(slog.NewTextHandler(w, &slog.HandlerOptions{Level: slog.LevelDebug}))
 }
 
-const noulEvaluateResponse = `{
+const noulAskResponse = `{
 	"model": "jev-1.13.0",
 	"answers": {"q": {"type": "noul", "noul": 0.95}},
 	"usage": {"input_tokens": 10, "output_tokens": 2}
 }`
 
-const choiceEvaluateResponse = `{
+const choiceAskResponse = `{
 	"model": "jev-1.13.0",
 	"answers": {"q": {"type": "choice", "choice": "billing", "probabilities": {"billing": 1}, "confidence": 0.9}},
 	"usage": {"input_tokens": 10, "output_tokens": 2}
 }`
 
-const scoreEvaluateResponse = `{
+const scoreAskResponse = `{
 	"model": "jev-1.13.0",
 	"answers": {"q": {"type": "score", "score": 1, "legend": {"0": "a", "1": "b"}, "probabilities": {"0": 0, "1": 1}, "confidence": 0.9}},
 	"usage": {"input_tokens": 10, "output_tokens": 2}

@@ -1,5 +1,5 @@
 // Command basic sends one state with three question types - noul, choice
-// and score - in a single Evaluate call and prints the typed answers.
+// and score - in a single Ask call and prints the typed answers.
 // It requires TYPESAFE_API_KEY in the environment.
 package main
 
@@ -21,9 +21,9 @@ func main() {
 	ctx := context.Background()
 	state := "I was charged twice. Please help ASAP."
 
-	resp, err := client.Evaluate(ctx, state,
+	resp, err := client.Ask(ctx, state,
 		sys1.Noul("billing", "Is this about a billing issue?"),
-		sys1.Choice("tone", "What is the tone of this message?", sys1.Names("calm", "angry")),
+		sys1.Choice("tone", "What is the tone of this message?", sys1.Choices("calm", "angry")),
 		sys1.Score("urgency", "How urgent is this message?", sys1.Levels("low", "medium", "high")),
 	)
 	if err != nil {

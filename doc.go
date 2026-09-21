@@ -38,21 +38,21 @@
 //	prob, err := client.Noul(ctx, state, "Is this message urgent?")
 //
 //	choice, err := client.Choice(ctx, state, "Which team should handle this?",
-//		sys1.Names("billing", "technical", "sales"))
+//		sys1.Choices("billing", "technical", "sales"))
 //
 //	score, err := client.Score(ctx, state, "How frustrated is the customer?",
 //		sys1.Levels("Calm", "Frustrated", "Very angry"))
 //
 // # Asking several questions about one state
 //
-// [Client.Evaluate] takes one state and any number of named questions,
+// [Client.Ask] takes one state and any number of named questions,
 // answering all of them in one round trip. Build each with the
 // matching constructor ([Noul], [Choice], [Score], or [Raw] for forward
 // compatibility), giving it the name its answer comes back under:
 //
-//	resp, err := client.Evaluate(ctx, state,
+//	resp, err := client.Ask(ctx, state,
 //		sys1.Noul("urgent", "Does this convey urgency?"),
-//		sys1.Choice("team", "Which team should handle this?", sys1.Choices{
+//		sys1.Choice("team", "Which team should handle this?", sys1.ChoiceCriteria{
 //			"billing":   "Payments, invoicing, refunds",
 //			"technical": "Bugs, outages, integrations",
 //		}),
@@ -65,7 +65,7 @@
 //	urgent, err := resp.Answers.Noul("urgent")
 //	team, err := resp.Answers.Choice("team")
 //
-// [Names] builds the [Choices] for a choice question whose option
+// [Choices] builds the [ChoiceCriteria] for a choice question whose option
 // names need no description, and [Levels] builds a score question's
 // ordered levels from plain strings. A battery built at runtime is a
 // plain []Question, spread as the variadic argument:
@@ -74,18 +74,18 @@
 //	for _, label := range labels {
 //		qs = append(qs, sys1.Noul(label, "Is this about "+label+"?"))
 //	}
-//	resp, err := client.Evaluate(ctx, state, qs...)
+//	resp, err := client.Ask(ctx, state, qs...)
 //
-// A per-call override derives a client and calls Evaluate on the
+// A per-call override derives a client and calls Ask on the
 // copy directly ([Client.WithModel], [Client.WithHeader],
 // [Client.WithRetry], [Client.WithExtraBody]):
 //
-//	resp, err := client.WithModel("jev-1.13.0").Evaluate(ctx, state,
+//	resp, err := client.WithModel("jev-1.13.0").Ask(ctx, state,
 //		sys1.Noul("urgent", "Does this convey urgency?"),
 //	)
 //
 // resp.Model, resp.Usage and resp.RequestID are only available through
-// Evaluate; the single-question shortcuts trade them for brevity.
+// Ask; the single-question shortcuts trade them for brevity.
 //
 // # Reading answers
 //
@@ -103,7 +103,7 @@
 // for full detail, or [errors.Is] against a sentinel for the status
 // category:
 //
-//	resp, err := client.Evaluate(ctx, state, questions...)
+//	resp, err := client.Ask(ctx, state, questions...)
 //	var apiErr *sys1.APIError
 //	switch {
 //	case errors.As(err, &apiErr):
@@ -119,13 +119,13 @@
 //
 // # Retries
 //
-// [Client.Evaluate] and [Client.Models] retry retryable failures
+// [Client.Ask] and [Client.Models] retry retryable failures
 // (408/429/5xx responses, connection errors, per-attempt timeouts)
 // under [RetryPolicy], honoring a server's Retry-After hint. The
 // default, [DefaultRetryPolicy], matches TypeSafe's other SDKs.
 // Configure it client-wide by deriving with [Client.WithRetry], or
 // override it for one call by chaining WithRetry straight onto
-// Evaluate; a caller's context cancellation always stops retries
+// Ask; a caller's context cancellation always stops retries
 // immediately.
 //
 // # Testing

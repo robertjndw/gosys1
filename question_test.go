@@ -64,7 +64,7 @@ func TestChoiceQuestionMarshalJSON(t *testing.T) {
 	}{
 		{
 			name: "descriptions",
-			q: Choice("q", "Which team should handle this?", Choices{
+			q: Choice("q", "Which team should handle this?", ChoiceCriteria{
 				"billing":   "Payments, invoicing, refunds",
 				"technical": "Bugs, outages, integrations",
 			}),
@@ -72,17 +72,17 @@ func TestChoiceQuestionMarshalJSON(t *testing.T) {
 		},
 		{
 			name: "nil description means name only",
-			q:    Choice("q", "What is the tone?", Choices{"calm": nil, "angry": nil}),
+			q:    Choice("q", "What is the tone?", ChoiceCriteria{"calm": nil, "angry": nil}),
 			want: `{"type":"choice","instructions":"What is the tone?","criteria":{"calm":null,"angry":null}}`,
 		},
 		{
 			name: "object instructions",
-			q:    Choice("q", map[string]any{"question": "Pick one"}, Choices{"a": nil, "b": nil}),
+			q:    Choice("q", map[string]any{"question": "Pick one"}, ChoiceCriteria{"a": nil, "b": nil}),
 			want: `{"type":"choice","instructions":{"question":"Pick one"},"criteria":{"a":null,"b":null}}`,
 		},
 		{
 			name: "array instructions",
-			q:    Choice("q", []any{"a", "b"}, Choices{"x": nil, "y": nil}),
+			q:    Choice("q", []any{"a", "b"}, ChoiceCriteria{"x": nil, "y": nil}),
 			want: `{"type":"choice","instructions":["a","b"],"criteria":{"x":null,"y":null}}`,
 		},
 	}
@@ -121,7 +121,7 @@ func TestScoreQuestionMarshalJSON(t *testing.T) {
 		},
 		{
 			name: "structured levels",
-			q:    Score("q", "Rate this", []Content{map[string]any{"label": "low"}, map[string]any{"label": "high"}}),
+			q:    Score("q", "Rate this", ScoreCriteria{map[string]any{"label": "low"}, map[string]any{"label": "high"}}),
 			want: `{"type":"score","instructions":"Rate this","criteria":[{"label":"low"},{"label":"high"}]}`,
 		},
 	}
@@ -145,16 +145,16 @@ func TestQuestionValidate(t *testing.T) {
 	}{
 		{"noul, no criteria", Noul("q", "q"), false},
 		{"noul, with criteria", Noul("q", "q").WithCriteria("y", "n"), false},
-		{"choice, 0 options", ChoiceQuestion{Instructions: "q", Choices: Choices{}}, true},
-		{"choice, 1 option", ChoiceQuestion{Instructions: "q", Choices: Choices{"a": nil}}, false},
-		{"choice, 255 options", ChoiceQuestion{Instructions: "q", Choices: manyChoices(255)}, false},
-		{"choice, 256 options", ChoiceQuestion{Instructions: "q", Choices: manyChoices(256)}, true},
-		{"choice, empty option name", ChoiceQuestion{Instructions: "q", Choices: Choices{"": nil}}, true},
-		{"score, 0 levels", ScoreQuestion{Instructions: "q", Levels: nil}, true},
-		{"score, 1 level", ScoreQuestion{Instructions: "q", Levels: []Content{"a"}}, true},
-		{"score, 2 levels", ScoreQuestion{Instructions: "q", Levels: []Content{"a", "b"}}, false},
-		{"score, 10 levels", ScoreQuestion{Instructions: "q", Levels: manyLevels(10)}, false},
-		{"score, 11 levels", ScoreQuestion{Instructions: "q", Levels: manyLevels(11)}, true},
+		{"choice, 0 options", ChoiceQuestion{Instructions: "q", Criteria: ChoiceCriteria{}}, true},
+		{"choice, 1 option", ChoiceQuestion{Instructions: "q", Criteria: ChoiceCriteria{"a": nil}}, false},
+		{"choice, 255 options", ChoiceQuestion{Instructions: "q", Criteria: manyChoices(255)}, false},
+		{"choice, 256 options", ChoiceQuestion{Instructions: "q", Criteria: manyChoices(256)}, true},
+		{"choice, empty option name", ChoiceQuestion{Instructions: "q", Criteria: ChoiceCriteria{"": nil}}, true},
+		{"score, 0 levels", ScoreQuestion{Instructions: "q", Criteria: nil}, true},
+		{"score, 1 level", ScoreQuestion{Instructions: "q", Criteria: ScoreCriteria{"a"}}, true},
+		{"score, 2 levels", ScoreQuestion{Instructions: "q", Criteria: ScoreCriteria{"a", "b"}}, false},
+		{"score, 10 levels", ScoreQuestion{Instructions: "q", Criteria: manyLevels(10)}, false},
+		{"score, 11 levels", ScoreQuestion{Instructions: "q", Criteria: manyLevels(11)}, true},
 	}
 
 	for _, tt := range tests {
@@ -176,16 +176,16 @@ func TestQuestionValidate(t *testing.T) {
 	}
 }
 
-func manyChoices(n int) Choices {
-	o := make(Choices, n)
+func manyChoices(n int) ChoiceCriteria {
+	o := make(ChoiceCriteria, n)
 	for i := 0; i < n; i++ {
 		o["opt"+strconv.Itoa(i)] = nil
 	}
 	return o
 }
 
-func manyLevels(n int) []Content {
-	levels := make([]Content, n)
+func manyLevels(n int) ScoreCriteria {
+	levels := make(ScoreCriteria, n)
 	for i := range levels {
 		levels[i] = "level" + strconv.Itoa(i)
 	}
@@ -255,7 +255,7 @@ func TestQuestionName(t *testing.T) {
 		q    Question
 	}{
 		{"noul", Noul("noul_q", "q")},
-		{"choice", Choice("choice_q", "q", Choices{"a": nil})},
+		{"choice", Choice("choice_q", "q", ChoiceCriteria{"a": nil})},
 		{"score", Score("score_q", "q", Levels("a", "b"))},
 		{"raw", Raw("raw_q", map[string]any{"type": "noul"})},
 	}
@@ -268,19 +268,19 @@ func TestQuestionName(t *testing.T) {
 	}
 }
 
-func TestNames(t *testing.T) {
-	got := Names("calm", "angry")
-	want := Choices{"calm": nil, "angry": nil}
+func TestChoices(t *testing.T) {
+	got := Choices("calm", "angry")
+	want := ChoiceCriteria{"calm": nil, "angry": nil}
 	if len(got) != len(want) {
-		t.Fatalf("Names() = %v, want %v", got, want)
+		t.Fatalf("Choices() = %v, want %v", got, want)
 	}
 	for name := range want {
 		if v, ok := got[name]; !ok || v != nil {
-			t.Errorf("Names()[%q] = %v, %v, want nil, true", name, v, ok)
+			t.Errorf("Choices()[%q] = %v, %v, want nil, true", name, v, ok)
 		}
 	}
-	if got := Names(); len(got) != 0 {
-		t.Errorf("Names() with no names = %v, want empty", got)
+	if got := Choices(); len(got) != 0 {
+		t.Errorf("Choices() with no names = %v, want empty", got)
 	}
 }
 

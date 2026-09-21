@@ -32,9 +32,9 @@ func main() {
 	ctx := context.Background()
 	state := "I was charged twice. Please help ASAP."
 
-	resp, err := client.Evaluate(ctx, state,
+	resp, err := client.Ask(ctx, state,
 		sys1.Noul("billing", "Is this about a billing issue?"),
-		sys1.Choice("tone", "What is the tone of this message?", sys1.Names("calm", "angry")),
+		sys1.Choice("tone", "What is the tone of this message?", sys1.Choices("calm", "angry")),
 		sys1.Score("urgency", "How urgent is this message?", sys1.Levels("low", "medium", "high")),
 	)
 	if err != nil {
@@ -53,7 +53,7 @@ func main() {
 
 `New()` reads `TYPESAFE_API_KEY` and the other `TYPESAFE_*` variables from the environment, so no options are needed in the common case.
 
-`Evaluate` takes one state and as many questions as you like. Each question is built with `sys1.Noul`, `sys1.Choice` or `sys1.Score` and carries the name its answer comes back under, which is also how the API keys them on the wire. A blank or duplicate name is rejected locally with `ErrInvalidRequest`.
+`Ask` takes one state and as many questions as you like. Each question is built with `sys1.Noul`, `sys1.Choice` or `sys1.Score` and carries the name its answer comes back under, which is also how the API keys them on the wire. A blank or duplicate name is rejected locally with `ErrInvalidRequest`.
 
 ## The three questions
 
@@ -63,7 +63,7 @@ func main() {
 | `Choice` | one option plus the full distribution | picking from a set you define |
 | `Score` | a probability-weighted position across ordered levels | a degree along a described dimension |
 
-`sys1.Names("calm", "angry")` builds the choices for a `Choice` whose option names speak for themselves; use a `sys1.Choices{"billing": "Payments, invoicing, refunds", ...}` literal when they need descriptions. `sys1.Levels("low", "medium", "high")` builds a `Score`'s ordered levels from plain strings and accepts an existing `[]string` via `levels...`. `sys1.Noul(name, q).WithCriteria(yes, no)` sharpens a yes/no question by describing what each side means.
+`sys1.Choices("calm", "angry")` builds the criteria for a `Choice` whose option names speak for themselves; use a `sys1.ChoiceCriteria{"billing": "Payments, invoicing, refunds", ...}` literal when they need descriptions. `sys1.Levels("low", "medium", "high")` builds a `Score`'s ordered criteria from plain strings, lowest first, and accepts an existing `[]string` via `levels...`. `sys1.Noul(name, q).WithCriteria(yes, no)` sharpens a yes/no question by describing what each side means.
 
 A battery built at runtime, such as one `Noul` per label, is a plain `[]sys1.Question` spread with `qs...`:
 
@@ -72,20 +72,20 @@ var qs []sys1.Question
 for _, label := range labels {
 	qs = append(qs, sys1.Noul(label, "Is this about "+label+"?"))
 }
-resp, err := client.Evaluate(ctx, state, qs...)
+resp, err := client.Ask(ctx, state, qs...)
 ```
 
-For a single question, skip `Evaluate` and the `Answers` map with the shortcuts:
+For a single question, skip `Ask` and the `Answers` map with the shortcuts:
 
 ```go
 billingAnswer, err := client.Noul(ctx, state, "Is this about a billing issue?")
 
-toneAnswer, err := client.Choice(ctx, state, "What is the tone of this message?", sys1.Names("calm", "angry"))
+toneAnswer, err := client.Choice(ctx, state, "What is the tone of this message?", sys1.Choices("calm", "angry"))
 
 urgencyAnswer, err := client.Score(ctx, state, "How urgent is this message?", sys1.Levels("low", "medium", "high"))
 ```
 
-`Noul`, `Choice` and `Score` all return their answer struct directly, skipping the `Answers` map. `resp.Model`, `resp.Usage` and `resp.RequestID` are only available through `Evaluate`.
+`Noul`, `Choice` and `Score` all return their answer struct directly, skipping the `Answers` map. `resp.Model`, `resp.Usage` and `resp.RequestID` are only available through `Ask`.
 
 ## Reading answers
 
@@ -122,7 +122,7 @@ Options:
 Derived clients cover everything else - model, per-attempt timeout (default 10s, see `DefaultTimeout`), retry policy, headers and extra body fields. `WithModel(name string)`, `WithTimeout(d time.Duration)`, `WithRetry(p RetryPolicy)`, `WithHeader(key, value string)` and `WithExtraBody(fields map[string]any)` are methods on `*Client` that return a modified copy and leave the receiver unchanged, the same shape as `context.WithTimeout` or `slog.Logger.With`. Chain a one-off override straight onto a call:
 
 ```go
-resp, err := client.WithModel("jev-1.13.0").Evaluate(ctx, state,
+resp, err := client.WithModel("jev-1.13.0").Ask(ctx, state,
 	sys1.Noul("billing", "Is this about a billing issue?"),
 )
 ```
@@ -141,14 +141,14 @@ Environment variables read by `New`:
 |---|---|---|
 | `TYPESAFE_API_KEY` | API key sent as a bearer token | none, required |
 | `TYPESAFE_BASE_URL` | API base URL | `https://api.typesafe.ai` |
-| `TYPESAFE_DEFAULT_MODEL` | default model for `Evaluate` and the shortcuts | `jev-latest` |
+| `TYPESAFE_DEFAULT_MODEL` | default model for `Ask` and the shortcuts | `jev-latest` |
 | `TYPESAFE_LOG_LEVEL` | `debug`, `info`, `warning`, `error` or `off`; logs to stderr at that level | unset, no logging |
 
 Precedence is explicit option, then environment variable, then default. A blank or whitespace-only environment variable is treated as unset. `debug` logs every attempt; `info` logs each scheduled retry. `TYPESAFE_DEFAULT_MODEL` sets the model at `New` time; to change it in code instead, derive with `client.WithModel(...)`.
 
 ## Retries
 
-`Evaluate` and `Models` retry retryable failures under a `RetryPolicy`. `DefaultRetryPolicy()` is used unless overridden:
+`Ask` and `Models` retry retryable failures under a `RetryPolicy`. `DefaultRetryPolicy()` is used unless overridden:
 
 | Field | Default |
 |---|---|
@@ -171,7 +171,7 @@ client = client.WithRetry(sys1.RetryPolicy{MaxRetries: 5})
 Override per use:
 
 ```go
-resp, err := client.WithRetry(sys1.RetryPolicy{MaxRetries: 0}).Evaluate(ctx, state,
+resp, err := client.WithRetry(sys1.RetryPolicy{MaxRetries: 0}).Ask(ctx, state,
 	sys1.Noul("billing", "Is this about a billing issue?"),
 )
 ```
@@ -180,7 +180,7 @@ resp, err := client.WithRetry(sys1.RetryPolicy{MaxRetries: 0}).Evaluate(ctx, sta
 
 ```go
 var apiErr *sys1.APIError
-resp, err := client.Evaluate(ctx, state, sys1.Noul("billing", "Is this about a billing issue?"))
+resp, err := client.Ask(ctx, state, sys1.Noul("billing", "Is this about a billing issue?"))
 switch {
 case errors.Is(err, sys1.ErrRateLimited):
 	// back off and retry later
@@ -198,13 +198,13 @@ A 422 response fills `APIError.Details` with `[]ValidationError`, one per invali
 
 ## Forward compatibility
 
-`sys1.Raw(name, fields)` builds a `RawQuestion` whose `Fields` map marshals verbatim, for question fields this library predates. `client.WithExtraBody(fields)` derives a client that adds extra top-level fields to a request body. Fields must not be named `state`, `model` or `questions`; `Evaluate` rejects a field with one of those names with an error wrapping `ErrInvalidRequest`, before any network call, since it would collide with a built-in field. Any answer with a `"type"` this library does not recognize decodes as a `RawAnswer` holding the raw JSON, instead of failing.
+`sys1.Raw(name, fields)` builds a `RawQuestion` whose `Fields` map marshals verbatim, for question fields this library predates. `client.WithExtraBody(fields)` derives a client that adds extra top-level fields to a request body. Fields must not be named `state`, `model` or `questions`; `Ask` rejects a field with one of those names with an error wrapping `ErrInvalidRequest`, before any network call, since it would collide with a built-in field. Any answer with a `"type"` this library does not recognize decodes as a `RawAnswer` holding the raw JSON, instead of failing.
 
 ## Examples
 
 | Directory | Shows |
 |---|---|
-| `examples/basic` | One `Evaluate` call with the guide's billing example: `Noul` billing, `Choice` tone, `Score` urgency, read with the typed accessors |
+| `examples/basic` | One `Ask` call with the guide's billing example: `Noul` billing, `Choice` tone, `Score` urgency, read with the typed accessors |
 | `examples/shortcuts` | The same three questions asked through `client.Noul`, `client.Choice` and `client.Score` |
 | `examples/labels` | A battery built at runtime, one `Noul` per label, sent as a `[]sys1.Question` spread with `questions...` |
 | `examples/typed` | Decoding answers into a caller-owned struct instead of touching the `Answers` map directly |

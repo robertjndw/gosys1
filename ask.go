@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-// Response is the result of a successful Client.Evaluate call.
+// Response is the result of a successful Client.Ask call.
 type Response struct {
 	// Model is the model that performed the evaluation. It may differ
 	// from the alias used in the request.
@@ -25,7 +25,7 @@ type Response struct {
 	RequestID string `json:"-"`
 }
 
-// Usage reports token usage for a single Evaluate call.
+// Usage reports token usage for a single Ask call.
 type Usage struct {
 	// InputTokens is the number of billable input tokens used.
 	InputTokens int `json:"input_tokens"`
@@ -33,26 +33,26 @@ type Usage struct {
 	OutputTokens int `json:"output_tokens"`
 }
 
-// Evaluate asks any number of named questions about state in a single
+// Ask asks any number of named questions about state in a single
 // round trip. Each question is built with the matching constructor
 // ([Noul], [Choice], [Score], or [Raw] for forward compatibility);
 // answers come back under each question's name, via resp.Answers's
 // typed accessors.
 //
-// Evaluate validates state, the questions and the client's model
+// Ask validates state, the questions and the client's model
 // before making any network call, returning an error wrapping
 // ErrInvalidRequest for a problem it can catch locally: a nil state,
 // zero questions, a nil question, a blank or duplicate question name,
 // a question whose own limits are violated (see each question type),
 // an empty model, or a WithExtraBody field that collides with a
 // built-in request field.
-func (c *Client) Evaluate(ctx context.Context, state Content, questions ...Question) (*Response, error) {
+func (c *Client) Ask(ctx context.Context, state Content, questions ...Question) (*Response, error) {
 	qmap, err := collectQuestions(questions)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := validateEvaluate(state, qmap, c.model); err != nil {
+	if err := validateAsk(state, qmap, c.model); err != nil {
 		return nil, err
 	}
 
@@ -83,7 +83,7 @@ func (c *Client) Evaluate(ctx context.Context, state Content, questions ...Quest
 }
 
 // collectQuestions keys questions by name, catching a nil question or
-// a blank or duplicate name here rather than in validateEvaluate,
+// a blank or duplicate name here rather than in validateAsk,
 // because once the questions sit in a map a duplicate is no longer
 // visible.
 func collectQuestions(questions []Question) (map[string]Question, error) {
@@ -104,8 +104,8 @@ func collectQuestions(questions []Question) (map[string]Question, error) {
 	return out, nil
 }
 
-// validateEvaluate checks Evaluate's inputs before any network call.
-func validateEvaluate(state Content, questions map[string]Question, model string) error {
+// validateAsk checks Ask's inputs before any network call.
+func validateAsk(state Content, questions map[string]Question, model string) error {
 	if state == nil {
 		return fmt.Errorf("%w: state must not be nil", ErrInvalidRequest)
 	}
@@ -142,13 +142,13 @@ const shortcutQuestionKey = "q"
 
 // Noul asks a single yes/no question and returns the NoulAnswer
 // directly, skipping the Answers map. Any error from the underlying
-// Evaluate call, including an *APIError, passes through unchanged.
+// Ask call, including an *APIError, passes through unchanged.
 //
 // Noul does not expose criteria (what counts as yes or no); use
-// Evaluate with sys1.Noul(name, instructions).WithCriteria(yes, no)
+// Ask with sys1.Noul(name, instructions).WithCriteria(yes, no)
 // for that.
 func (c *Client) Noul(ctx context.Context, state, instructions Content) (NoulAnswer, error) {
-	resp, err := c.Evaluate(ctx, state, Noul(shortcutQuestionKey, instructions))
+	resp, err := c.Ask(ctx, state, Noul(shortcutQuestionKey, instructions))
 	if err != nil {
 		return NoulAnswer{}, err
 	}
@@ -157,9 +157,9 @@ func (c *Client) Noul(ctx context.Context, state, instructions Content) (NoulAns
 
 // Choice asks a single choice question and returns the ChoiceAnswer
 // directly, skipping the Answers map. Any error from the underlying
-// Evaluate call, including an *APIError, passes through unchanged.
-func (c *Client) Choice(ctx context.Context, state, instructions Content, choices Choices) (ChoiceAnswer, error) {
-	resp, err := c.Evaluate(ctx, state, Choice(shortcutQuestionKey, instructions, choices))
+// Ask call, including an *APIError, passes through unchanged.
+func (c *Client) Choice(ctx context.Context, state, instructions Content, criteria ChoiceCriteria) (ChoiceAnswer, error) {
+	resp, err := c.Ask(ctx, state, Choice(shortcutQuestionKey, instructions, criteria))
 	if err != nil {
 		return ChoiceAnswer{}, err
 	}
@@ -168,10 +168,10 @@ func (c *Client) Choice(ctx context.Context, state, instructions Content, choice
 
 // Score asks a single score question over the given ordered levels
 // (see [Levels]) and returns the ScoreAnswer directly, skipping the
-// Answers map. Any error from the underlying Evaluate call, including
+// Answers map. Any error from the underlying Ask call, including
 // an *APIError, passes through unchanged.
-func (c *Client) Score(ctx context.Context, state, instructions Content, levels []Content) (ScoreAnswer, error) {
-	resp, err := c.Evaluate(ctx, state, Score(shortcutQuestionKey, instructions, levels))
+func (c *Client) Score(ctx context.Context, state, instructions Content, criteria ScoreCriteria) (ScoreAnswer, error) {
+	resp, err := c.Ask(ctx, state, Score(shortcutQuestionKey, instructions, criteria))
 	if err != nil {
 		return ScoreAnswer{}, err
 	}

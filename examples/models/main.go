@@ -39,7 +39,7 @@ func main() {
 	// Built once and reused for every call that should default to this
 	// model instead of the account's.
 	versioned := client.WithModel("jev-1.13.0")
-	resp, err := versioned.Evaluate(ctx, "I was charged twice. Please help ASAP.",
+	resp, err := versioned.Ask(ctx, "I was charged twice. Please help ASAP.",
 		sys1.Noul("billing", "Is this about a billing issue?"),
 	)
 	if err != nil {
@@ -50,7 +50,7 @@ func main() {
 
 	// Or chain WithModel straight onto a single call; client itself is
 	// untouched and keeps using its own default model afterward.
-	resp, err = client.WithModel("jev-1.13.0").Evaluate(ctx, "I was charged twice. Please help ASAP.",
+	resp, err = client.WithModel("jev-1.13.0").Ask(ctx, "I was charged twice. Please help ASAP.",
 		sys1.Noul("billing", "Is this about a billing issue?"),
 	)
 	if err != nil {

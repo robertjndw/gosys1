@@ -34,7 +34,7 @@ func main() {
 
 	// A one-off override chained straight onto this call; client keeps
 	// its own retry policy for every other call.
-	resp, err := client.WithRetry(sys1.RetryPolicy{MaxRetries: 1, MaxBackoff: 100 * time.Millisecond}).Evaluate(ctx, "I was charged twice. Please help ASAP.",
+	resp, err := client.WithRetry(sys1.RetryPolicy{MaxRetries: 1, MaxBackoff: 100 * time.Millisecond}).Ask(ctx, "I was charged twice. Please help ASAP.",
 		sys1.Noul("billing", "Is this about a billing issue?"),
 	)
 	if err != nil {

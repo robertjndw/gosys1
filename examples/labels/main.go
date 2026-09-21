@@ -1,5 +1,5 @@
 // Command labels builds a battery at runtime, one Noul per label, as a
-// []sys1.Question spread into Evaluate. Several labels can apply
+// []sys1.Question spread into Ask. Several labels can apply
 // to one message at once, which is why each is its own yes/no question
 // rather than one Choice. It requires TYPESAFE_API_KEY in the environment.
 package main
@@ -33,7 +33,7 @@ func main() {
 	}
 
 	ctx := context.Background()
-	resp, err := client.Evaluate(ctx, "I was charged twice. Fix this or I'm cancelling.", questions...)
+	resp, err := client.Ask(ctx, "I was charged twice. Fix this or I'm cancelling.", questions...)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "sys1: evaluate:", err)
 		os.Exit(1)

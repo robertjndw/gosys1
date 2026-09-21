@@ -19,11 +19,11 @@ func TestRetry429WithRetryAfterThenSucceeds(t *testing.T) {
 			writeJSON(w, http.StatusTooManyRequests, `{"message": "slow down"}`, map[string]string{"Retry-After": "0"})
 			return
 		}
-		writeJSON(w, http.StatusOK, noulEvaluateResponse, nil)
+		writeJSON(w, http.StatusOK, noulAskResponse, nil)
 	})
-	resp, err := c.Evaluate(context.Background(), "state", Noul("q", "q"))
+	resp, err := c.Ask(context.Background(), "state", Noul("q", "q"))
 	if err != nil {
-		t.Fatalf("Evaluate: %v", err)
+		t.Fatalf("Ask: %v", err)
 	}
 	if resp.Model != "jev-1.13.0" {
 		t.Errorf("resp.Model = %q, want jev-1.13.0", resp.Model)
@@ -41,11 +41,11 @@ func TestRetry529(t *testing.T) {
 			writeJSON(w, 529, `{"message": "overloaded"}`, nil)
 			return
 		}
-		writeJSON(w, http.StatusOK, noulEvaluateResponse, nil)
+		writeJSON(w, http.StatusOK, noulAskResponse, nil)
 	})
-	_, err := c.Evaluate(context.Background(), "state", Noul("q", "q"))
+	_, err := c.Ask(context.Background(), "state", Noul("q", "q"))
 	if err != nil {
-		t.Fatalf("Evaluate: %v", err)
+		t.Fatalf("Ask: %v", err)
 	}
 	if got := attempts.Load(); got != 2 {
 		t.Errorf("server received %d requests, want 2", got)
@@ -58,7 +58,7 @@ func TestUnauthorizedNotRetried(t *testing.T) {
 		attempts.Add(1)
 		writeJSON(w, http.StatusUnauthorized, `{"message": "invalid API key"}`, nil)
 	})
-	_, err := c.Evaluate(context.Background(), "state", Noul("q", "q"))
+	_, err := c.Ask(context.Background(), "state", Noul("q", "q"))
 	if !errors.Is(err, ErrUnauthorized) {
 		t.Errorf("error = %v, want ErrUnauthorized", err)
 	}
@@ -90,7 +90,7 @@ func TestCtxCancellationStopsRetriesImmediately(t *testing.T) {
 		return ctx.Err()
 	}
 
-	_, err := c.Evaluate(ctx, "state", Noul("q", "q"))
+	_, err := c.Ask(ctx, "state", Noul("q", "q"))
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("error = %v, want context.Canceled", err)
 	}
@@ -103,13 +103,13 @@ func TestCtxAlreadyCanceled(t *testing.T) {
 	var attempts atomic.Int32
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		attempts.Add(1)
-		writeJSON(w, http.StatusOK, noulEvaluateResponse, nil)
+		writeJSON(w, http.StatusOK, noulAskResponse, nil)
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := c.Evaluate(ctx, "state", Noul("q", "q"))
+	_, err := c.Ask(ctx, "state", Noul("q", "q"))
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("error = %v, want context.Canceled", err)
 	}
@@ -125,13 +125,13 @@ func TestPerAttemptTimeoutRetried(t *testing.T) {
 		if n == 1 {
 			time.Sleep(100 * time.Millisecond)
 		}
-		writeJSON(w, http.StatusOK, noulEvaluateResponse, nil)
+		writeJSON(w, http.StatusOK, noulAskResponse, nil)
 	}).
 		WithTimeout(10 * time.Millisecond).
 		WithRetry(RetryPolicy{MaxRetries: 1, InitialBackoff: time.Millisecond, RetryConnErrors: true})
-	_, err := c.Evaluate(context.Background(), "state", Noul("q", "q"))
+	_, err := c.Ask(context.Background(), "state", Noul("q", "q"))
 	if err != nil {
-		t.Fatalf("Evaluate: %v", err)
+		t.Fatalf("Ask: %v", err)
 	}
 	if got := attempts.Load(); got != 2 {
 		t.Errorf("server received %d requests, want 2", got)
@@ -144,9 +144,9 @@ func TestMaxRetriesZeroGivesOneAttempt(t *testing.T) {
 		attempts.Add(1)
 		writeJSON(w, http.StatusInternalServerError, `{"message": "boom"}`, nil)
 	}).WithRetry(RetryPolicy{})
-	_, err := c.Evaluate(context.Background(), "state", Noul("q", "q"))
+	_, err := c.Ask(context.Background(), "state", Noul("q", "q"))
 	if err == nil {
-		t.Fatal("Evaluate() error = nil, want error")
+		t.Fatal("Ask() error = nil, want error")
 	}
 	if got := attempts.Load(); got != 1 {
 		t.Errorf("server received %d requests, want 1", got)
@@ -160,7 +160,7 @@ func TestRetriesExhaustedWraps(t *testing.T) {
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, `{"message": "boom"}`, nil)
 	}).WithRetry(RetryPolicy{MaxRetries: 2, InitialBackoff: time.Millisecond, RetryConnErrors: true})
-	_, err := c.Evaluate(context.Background(), "state", Noul("q", "q"))
+	_, err := c.Ask(context.Background(), "state", Noul("q", "q"))
 	if !errors.Is(err, ErrRetriesExhausted) {
 		t.Errorf("error = %v, want ErrRetriesExhausted", err)
 	}
@@ -180,11 +180,11 @@ func TestBodyResentIdenticallyOnRetry(t *testing.T) {
 			writeJSON(w, http.StatusInternalServerError, `{"message": "boom"}`, nil)
 			return
 		}
-		writeJSON(w, http.StatusOK, noulEvaluateResponse, nil)
+		writeJSON(w, http.StatusOK, noulAskResponse, nil)
 	}).WithRetry(RetryPolicy{MaxRetries: 2, InitialBackoff: time.Millisecond, RetryConnErrors: true})
-	_, err := c.Evaluate(context.Background(), "state", Noul("q", "q"))
+	_, err := c.Ask(context.Background(), "state", Noul("q", "q"))
 	if err != nil {
-		t.Fatalf("Evaluate: %v", err)
+		t.Fatalf("Ask: %v", err)
 	}
 	if len(bodies) != 3 {
 		t.Fatalf("len(bodies) = %d, want 3", len(bodies))
@@ -200,7 +200,7 @@ func TestInvalidResponseBody(t *testing.T) {
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, `not json`, nil)
 	})
-	_, err := c.Evaluate(context.Background(), "state", Noul("q", "q"))
+	_, err := c.Ask(context.Background(), "state", Noul("q", "q"))
 	if !errors.Is(err, ErrInvalidResponse) {
 		t.Errorf("error = %v, want ErrInvalidResponse", err)
 	}

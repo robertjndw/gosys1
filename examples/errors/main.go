@@ -24,7 +24,7 @@ func main() {
 
 	// A score question needs at least two levels; this one is rejected
 	// locally and never reaches the network.
-	_, err = client.Evaluate(ctx, "state",
+	_, err = client.Ask(ctx, "state",
 		sys1.Score("urgency", "How urgent is this?", sys1.Levels("only one level")),
 	)
 	if !errors.Is(err, sys1.ErrInvalidRequest) {
@@ -35,7 +35,7 @@ func main() {
 
 	// sys1.Raw skips this library's own validation, so a request
 	// missing "criteria" reaches the server and comes back as a 422.
-	_, err = client.Evaluate(ctx, "state",
+	_, err = client.Ask(ctx, "state",
 		sys1.Raw("team", map[string]any{"type": "choice", "instructions": "Which team?"}),
 	)
 

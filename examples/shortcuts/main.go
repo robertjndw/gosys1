@@ -27,7 +27,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	tone, err := client.Choice(ctx, state, "What is the tone of this message?", sys1.Names("calm", "angry"))
+	tone, err := client.Choice(ctx, state, "What is the tone of this message?", sys1.Choices("calm", "angry"))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "sys1: choice:", err)
 		os.Exit(1)

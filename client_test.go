@@ -18,15 +18,15 @@ func TestNewInvalidBaseURL(t *testing.T) {
 	}
 }
 
-func TestWithRetryInvalidPolicySurfacesFromEvaluateAndModels(t *testing.T) {
+func TestWithRetryInvalidPolicySurfacesFromAskAndModels(t *testing.T) {
 	called := false
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		called = true
-		writeJSON(w, http.StatusOK, noulEvaluateResponse, nil)
+		writeJSON(w, http.StatusOK, noulAskResponse, nil)
 	}).WithRetry(RetryPolicy{MaxRetries: -1})
 
-	if _, err := c.Evaluate(context.Background(), "state", Noul("q", "q")); !errors.Is(err, ErrInvalidRequest) {
-		t.Errorf("Evaluate() error = %v, want ErrInvalidRequest", err)
+	if _, err := c.Ask(context.Background(), "state", Noul("q", "q")); !errors.Is(err, ErrInvalidRequest) {
+		t.Errorf("Ask() error = %v, want ErrInvalidRequest", err)
 	}
 	if _, err := c.Models(context.Background()); !errors.Is(err, ErrInvalidRequest) {
 		t.Errorf("Models() error = %v, want ErrInvalidRequest", err)
@@ -76,19 +76,19 @@ func TestWithHeaderChildHeaderNeverReachesParentRequests(t *testing.T) {
 	var gotHeader string
 	base := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		gotHeader = r.Header.Get("X-Custom")
-		writeJSON(w, http.StatusOK, noulEvaluateResponse, nil)
+		writeJSON(w, http.StatusOK, noulAskResponse, nil)
 	})
 	child := base.WithHeader("X-Custom", "child-value")
 
-	if _, err := base.Evaluate(context.Background(), "state", Noul("q", "q")); err != nil {
-		t.Fatalf("Evaluate (parent): %v", err)
+	if _, err := base.Ask(context.Background(), "state", Noul("q", "q")); err != nil {
+		t.Fatalf("Ask (parent): %v", err)
 	}
 	if gotHeader != "" {
 		t.Errorf("parent request sent X-Custom = %q, want empty", gotHeader)
 	}
 
-	if _, err := child.Evaluate(context.Background(), "state", Noul("q", "q")); err != nil {
-		t.Fatalf("Evaluate (child): %v", err)
+	if _, err := child.Ask(context.Background(), "state", Noul("q", "q")); err != nil {
+		t.Fatalf("Ask (child): %v", err)
 	}
 	if gotHeader != "child-value" {
 		t.Errorf("child request sent X-Custom = %q, want child-value", gotHeader)
@@ -121,10 +121,10 @@ func TestWithTimeoutZeroAndNegativeDisablePerAttemptTimeout(t *testing.T) {
 		t.Run(d.String(), func(t *testing.T) {
 			c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 				time.Sleep(30 * time.Millisecond)
-				writeJSON(w, http.StatusOK, noulEvaluateResponse, nil)
+				writeJSON(w, http.StatusOK, noulAskResponse, nil)
 			}).WithTimeout(5 * time.Millisecond).WithTimeout(d)
-			if _, err := c.Evaluate(context.Background(), "state", Noul("q", "q")); err != nil {
-				t.Fatalf("Evaluate: %v, want nil (per-attempt timeout should be disabled)", err)
+			if _, err := c.Ask(context.Background(), "state", Noul("q", "q")); err != nil {
+				t.Fatalf("Ask: %v, want nil (per-attempt timeout should be disabled)", err)
 			}
 		})
 	}
@@ -134,10 +134,10 @@ func TestWithUserAgentAppendsSuffix(t *testing.T) {
 	var gotUA string
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		gotUA = r.Header.Get("User-Agent")
-		writeJSON(w, http.StatusOK, noulEvaluateResponse, nil)
+		writeJSON(w, http.StatusOK, noulAskResponse, nil)
 	}, WithUserAgent("my-app/1.0"))
-	if _, err := c.Evaluate(context.Background(), "state", Noul("q", "q")); err != nil {
-		t.Fatalf("Evaluate: %v", err)
+	if _, err := c.Ask(context.Background(), "state", Noul("q", "q")); err != nil {
+		t.Fatalf("Ask: %v", err)
 	}
 	want := fmt.Sprintf("sys1-go/%s (my-app/1.0)", Version)
 	if gotUA != want {
@@ -148,11 +148,11 @@ func TestWithUserAgentAppendsSuffix(t *testing.T) {
 func TestWithLoggerDoesNotLeakSecrets(t *testing.T) {
 	var buf strings.Builder
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, noulEvaluateResponse, nil)
+		writeJSON(w, http.StatusOK, noulAskResponse, nil)
 	}, WithAPIKey("super-secret"), WithLogger(slogTestLogger(&buf)))
 
-	if _, err := c.Evaluate(context.Background(), "state", Noul("q", "q")); err != nil {
-		t.Fatalf("Evaluate: %v", err)
+	if _, err := c.Ask(context.Background(), "state", Noul("q", "q")); err != nil {
+		t.Fatalf("Ask: %v", err)
 	}
 
 	out := buf.String()

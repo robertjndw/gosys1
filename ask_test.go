@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestEvaluateSendsDocumentedBody(t *testing.T) {
+func TestAskSendsDocumentedBody(t *testing.T) {
 	var gotBody map[string]any
 	var gotAuth, gotUA, gotMethod, gotPath, gotContentType string
 
@@ -20,13 +20,13 @@ func TestEvaluateSendsDocumentedBody(t *testing.T) {
 		gotUA = r.Header.Get("User-Agent")
 		gotContentType = r.Header.Get("Content-Type")
 		gotBody = decodeBody(t, r)
-		writeJSON(w, http.StatusOK, noulEvaluateResponse, map[string]string{"x-typesafe-request-id": "req-123"})
+		writeJSON(w, http.StatusOK, noulAskResponse, map[string]string{"x-typesafe-request-id": "req-123"})
 	}, WithAPIKey("secret-key"))
-	resp, err := c.Evaluate(context.Background(), "Help! My payouts have been failing for 3 days.",
+	resp, err := c.Ask(context.Background(), "Help! My payouts have been failing for 3 days.",
 		Noul("is_urgent", "Does this convey urgency?"),
 	)
 	if err != nil {
-		t.Fatalf("Evaluate: %v", err)
+		t.Fatalf("Ask: %v", err)
 	}
 
 	if gotMethod != http.MethodPost {
@@ -74,20 +74,20 @@ func TestEvaluateSendsDocumentedBody(t *testing.T) {
 	}
 }
 
-func TestEvaluateSpreadQuestionSlice(t *testing.T) {
+func TestAskSpreadQuestionSlice(t *testing.T) {
 	var gotBody map[string]any
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		gotBody = decodeBody(t, r)
-		writeJSON(w, http.StatusOK, noulEvaluateResponse, nil)
+		writeJSON(w, http.StatusOK, noulAskResponse, nil)
 	}).WithModel("per-call-model")
 	qs := []Question{
 		Noul("billing", "About billing?"),
-		Choice("tone", "Tone?", Choices{"calm": nil, "angry": nil}),
+		Choice("tone", "Tone?", ChoiceCriteria{"calm": nil, "angry": nil}),
 		Score("urgency", "Urgency?", Levels("low", "high")),
 	}
-	_, err := c.Evaluate(context.Background(), "state", qs...)
+	_, err := c.Ask(context.Background(), "state", qs...)
 	if err != nil {
-		t.Fatalf("Evaluate: %v", err)
+		t.Fatalf("Ask: %v", err)
 	}
 
 	if got := gotBody["model"]; got != "per-call-model" {
@@ -105,63 +105,63 @@ func TestEvaluateSpreadQuestionSlice(t *testing.T) {
 	}
 }
 
-func TestEvaluateRejectsDuplicateQuestionName(t *testing.T) {
+func TestAskRejectsDuplicateQuestionName(t *testing.T) {
 	called := false
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		called = true
-		writeJSON(w, http.StatusOK, noulEvaluateResponse, nil)
+		writeJSON(w, http.StatusOK, noulAskResponse, nil)
 	})
-	_, err := c.Evaluate(context.Background(), "state", Noul("q", "a"), Noul("q", "b"))
+	_, err := c.Ask(context.Background(), "state", Noul("q", "a"), Noul("q", "b"))
 	if !errors.Is(err, ErrInvalidRequest) {
-		t.Errorf("Evaluate() error = %v, want ErrInvalidRequest", err)
+		t.Errorf("Ask() error = %v, want ErrInvalidRequest", err)
 	}
 	if called {
 		t.Error("server was called despite a duplicate question name")
 	}
 }
 
-func TestEvaluateUsesDerivedModel(t *testing.T) {
+func TestAskUsesDerivedModel(t *testing.T) {
 	var gotModel string
 	base := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		gotModel, _ = decodeBody(t, r)["model"].(string)
-		writeJSON(w, http.StatusOK, noulEvaluateResponse, nil)
+		writeJSON(w, http.StatusOK, noulAskResponse, nil)
 	}).WithModel("client-default-model")
 	c := base.WithModel("per-call-model")
-	_, err := c.Evaluate(context.Background(), "state", Noul("q", "q"))
+	_, err := c.Ask(context.Background(), "state", Noul("q", "q"))
 	if err != nil {
-		t.Fatalf("Evaluate: %v", err)
+		t.Fatalf("Ask: %v", err)
 	}
 	if gotModel != "per-call-model" {
 		t.Errorf("model in body = %q, want per-call-model", gotModel)
 	}
 }
 
-func TestEvaluateUsesDerivedExtraBody(t *testing.T) {
+func TestAskUsesDerivedExtraBody(t *testing.T) {
 	var gotBody map[string]any
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		gotBody = decodeBody(t, r)
-		writeJSON(w, http.StatusOK, noulEvaluateResponse, nil)
+		writeJSON(w, http.StatusOK, noulAskResponse, nil)
 	}).WithExtraBody(map[string]any{"beam_width": float64(4)})
-	_, err := c.Evaluate(context.Background(), "state", Noul("q", "q"))
+	_, err := c.Ask(context.Background(), "state", Noul("q", "q"))
 	if err != nil {
-		t.Fatalf("Evaluate: %v", err)
+		t.Fatalf("Ask: %v", err)
 	}
 	if got := gotBody["beam_width"]; got != float64(4) {
 		t.Errorf("beam_width = %v, want 4", got)
 	}
 }
 
-func TestEvaluateRejectsExtraBodyCollidingWithBuiltinField(t *testing.T) {
+func TestAskRejectsExtraBodyCollidingWithBuiltinField(t *testing.T) {
 	for _, key := range []string{"state", "model", "questions"} {
 		t.Run(key, func(t *testing.T) {
 			called := false
 			c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 				called = true
-				writeJSON(w, http.StatusOK, noulEvaluateResponse, nil)
+				writeJSON(w, http.StatusOK, noulAskResponse, nil)
 			}).WithExtraBody(map[string]any{key: "collides"})
-			_, err := c.Evaluate(context.Background(), "state", Noul("q", "q"))
+			_, err := c.Ask(context.Background(), "state", Noul("q", "q"))
 			if !errors.Is(err, ErrInvalidRequest) {
-				t.Errorf("Evaluate() error = %v, want ErrInvalidRequest", err)
+				t.Errorf("Ask() error = %v, want ErrInvalidRequest", err)
 			}
 			if called {
 				t.Error("server was called despite a colliding extra body field")
@@ -170,31 +170,31 @@ func TestEvaluateRejectsExtraBodyCollidingWithBuiltinField(t *testing.T) {
 	}
 }
 
-func TestEvaluateUsesDerivedHeader(t *testing.T) {
+func TestAskUsesDerivedHeader(t *testing.T) {
 	var gotHeader string
 	base := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		gotHeader = r.Header.Get("X-Custom")
-		writeJSON(w, http.StatusOK, noulEvaluateResponse, nil)
+		writeJSON(w, http.StatusOK, noulAskResponse, nil)
 	}).WithHeader("X-Custom", "client-value")
 	c := base.WithHeader("X-Custom", "call-value")
-	_, err := c.Evaluate(context.Background(), "state", Noul("q", "q"))
+	_, err := c.Ask(context.Background(), "state", Noul("q", "q"))
 	if err != nil {
-		t.Fatalf("Evaluate: %v", err)
+		t.Fatalf("Ask: %v", err)
 	}
 	if gotHeader != "call-value" {
 		t.Errorf("X-Custom = %q, want call-value (the derived header should win)", gotHeader)
 	}
 }
 
-func TestEvaluateValidatesLocallyBeforeNetworkCall(t *testing.T) {
+func TestAskValidatesLocallyBeforeNetworkCall(t *testing.T) {
 	called := false
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		called = true
-		writeJSON(w, http.StatusOK, noulEvaluateResponse, nil)
+		writeJSON(w, http.StatusOK, noulAskResponse, nil)
 	})
-	_, err := c.Evaluate(context.Background(), "state")
+	_, err := c.Ask(context.Background(), "state")
 	if !errors.Is(err, ErrInvalidRequest) {
-		t.Errorf("Evaluate() error = %v, want ErrInvalidRequest", err)
+		t.Errorf("Ask() error = %v, want ErrInvalidRequest", err)
 	}
 	if called {
 		t.Error("server was called despite a client-side validation failure")
@@ -206,7 +206,7 @@ func TestClientShortcuts(t *testing.T) {
 		var gotQuestions map[string]any
 		c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 			gotQuestions, _ = decodeBody(t, r)["questions"].(map[string]any)
-			writeJSON(w, http.StatusOK, noulEvaluateResponse, nil)
+			writeJSON(w, http.StatusOK, noulAskResponse, nil)
 		})
 		ans, err := c.Noul(context.Background(), "state", "Is this urgent?")
 		if err != nil {
@@ -225,9 +225,9 @@ func TestClientShortcuts(t *testing.T) {
 		var gotQuestions map[string]any
 		c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 			gotQuestions, _ = decodeBody(t, r)["questions"].(map[string]any)
-			writeJSON(w, http.StatusOK, choiceEvaluateResponse, nil)
+			writeJSON(w, http.StatusOK, choiceAskResponse, nil)
 		})
-		ans, err := c.Choice(context.Background(), "state", "Which team?", Choices{"billing": nil, "technical": nil})
+		ans, err := c.Choice(context.Background(), "state", "Which team?", ChoiceCriteria{"billing": nil, "technical": nil})
 		if err != nil {
 			t.Fatalf("Choice: %v", err)
 		}
@@ -244,7 +244,7 @@ func TestClientShortcuts(t *testing.T) {
 		var gotQuestions map[string]any
 		c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 			gotQuestions, _ = decodeBody(t, r)["questions"].(map[string]any)
-			writeJSON(w, http.StatusOK, scoreEvaluateResponse, nil)
+			writeJSON(w, http.StatusOK, scoreAskResponse, nil)
 		})
 		ans, err := c.Score(context.Background(), "state", "Rate this", Levels("low", "high"))
 		if err != nil {
@@ -263,7 +263,7 @@ func TestClientShortcuts(t *testing.T) {
 		var gotModel any
 		c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 			gotModel = decodeBody(t, r)["model"]
-			writeJSON(w, http.StatusOK, scoreEvaluateResponse, nil)
+			writeJSON(w, http.StatusOK, scoreAskResponse, nil)
 		}).WithModel("per-call-model")
 		if _, err := c.Score(context.Background(), "state", "Rate this", Levels("low", "high")); err != nil {
 			t.Fatalf("Score: %v", err)
@@ -281,7 +281,7 @@ func TestClientShortcuts(t *testing.T) {
 		if _, err := c.Noul(context.Background(), "state", "q"); !errors.Is(err, ErrRateLimited) {
 			t.Errorf("Noul() error = %v, want ErrRateLimited", err)
 		}
-		if _, err := c.Choice(context.Background(), "state", "q", Choices{"a": nil}); !errors.Is(err, ErrRateLimited) {
+		if _, err := c.Choice(context.Background(), "state", "q", ChoiceCriteria{"a": nil}); !errors.Is(err, ErrRateLimited) {
 			t.Errorf("Choice() error = %v, want ErrRateLimited", err)
 		}
 		if _, err := c.Score(context.Background(), "state", "q", Levels("a", "b")); !errors.Is(err, ErrRateLimited) {
@@ -349,30 +349,30 @@ func TestCollectQuestions(t *testing.T) {
 	}
 }
 
-func TestValidateEvaluateEmptyQuestions(t *testing.T) {
-	err := validateEvaluate("state", map[string]Question{}, "model")
+func TestValidateAskEmptyQuestions(t *testing.T) {
+	err := validateAsk("state", map[string]Question{}, "model")
 	if !errors.Is(err, ErrInvalidRequest) {
-		t.Errorf("validateEvaluate with empty questions = %v, want error wrapping ErrInvalidRequest", err)
+		t.Errorf("validateAsk with empty questions = %v, want error wrapping ErrInvalidRequest", err)
 	}
 }
 
-func TestValidateEvaluateNilState(t *testing.T) {
-	err := validateEvaluate(nil, map[string]Question{"q": Noul("q", "q")}, "model")
+func TestValidateAskNilState(t *testing.T) {
+	err := validateAsk(nil, map[string]Question{"q": Noul("q", "q")}, "model")
 	if !errors.Is(err, ErrInvalidRequest) {
-		t.Errorf("validateEvaluate with nil state = %v, want error wrapping ErrInvalidRequest", err)
+		t.Errorf("validateAsk with nil state = %v, want error wrapping ErrInvalidRequest", err)
 	}
 }
 
-func TestValidateEvaluateEmptyModel(t *testing.T) {
-	err := validateEvaluate("state", map[string]Question{"q": Noul("q", "q")}, "  ")
+func TestValidateAskEmptyModel(t *testing.T) {
+	err := validateAsk("state", map[string]Question{"q": Noul("q", "q")}, "  ")
 	if !errors.Is(err, ErrInvalidRequest) {
-		t.Errorf("validateEvaluate with blank model = %v, want error wrapping ErrInvalidRequest", err)
+		t.Errorf("validateAsk with blank model = %v, want error wrapping ErrInvalidRequest", err)
 	}
 }
 
-func TestValidateEvaluatePropagatesQuestionError(t *testing.T) {
-	err := validateEvaluate("state", map[string]Question{"bad": ScoreQuestion{Name: "bad", Instructions: "q", Levels: []Content{"only one"}}}, "model")
+func TestValidateAskPropagatesQuestionError(t *testing.T) {
+	err := validateAsk("state", map[string]Question{"bad": ScoreQuestion{Name: "bad", Instructions: "q", Criteria: ScoreCriteria{"only one"}}}, "model")
 	if !errors.Is(err, ErrInvalidRequest) {
-		t.Errorf("validateEvaluate with invalid question = %v, want error wrapping ErrInvalidRequest", err)
+		t.Errorf("validateAsk with invalid question = %v, want error wrapping ErrInvalidRequest", err)
 	}
 }
