@@ -3,26 +3,9 @@ package sys1
 import (
 	"encoding/json"
 	"errors"
-	"reflect"
 	"strconv"
 	"testing"
 )
-
-// assertJSONEqual compares two JSON documents by decoded value rather
-// than raw bytes, since map key order is not stable.
-func assertJSONEqual(t *testing.T, got []byte, want string) {
-	t.Helper()
-	var gotVal, wantVal any
-	if err := json.Unmarshal(got, &gotVal); err != nil {
-		t.Fatalf("got is not valid JSON: %v\n%s", err, got)
-	}
-	if err := json.Unmarshal([]byte(want), &wantVal); err != nil {
-		t.Fatalf("want is not valid JSON: %v\n%s", err, want)
-	}
-	if !reflect.DeepEqual(gotVal, wantVal) {
-		t.Errorf("JSON mismatch:\n got: %s\nwant: %s", got, want)
-	}
-}
 
 func TestNoulQuestionMarshalJSON(t *testing.T) {
 	tests := []struct {
@@ -282,93 +265,6 @@ func TestQuestionName(t *testing.T) {
 				t.Errorf("name() = %q, want %q", got, tt.name+"_q")
 			}
 		})
-	}
-}
-
-func TestCollectQuestions(t *testing.T) {
-	t.Run("questions keyed by name", func(t *testing.T) {
-		questions, err := collectQuestions([]Question{
-			Noul("a", "q"),
-			Score("b", "q", Levels("low", "high")),
-		})
-		if err != nil {
-			t.Fatalf("collectQuestions: %v", err)
-		}
-		if len(questions) != 2 {
-			t.Fatalf("got %d questions, want 2", len(questions))
-		}
-		if _, ok := questions["a"].(NoulQuestion); !ok {
-			t.Errorf("questions[a] = %T, want NoulQuestion", questions["a"])
-		}
-		if _, ok := questions["b"].(ScoreQuestion); !ok {
-			t.Errorf("questions[b] = %T, want ScoreQuestion", questions["b"])
-		}
-	})
-
-	t.Run("a []Question built at runtime spreads like literal questions", func(t *testing.T) {
-		labels := []string{"billing", "refund"}
-		var qs []Question
-		for _, l := range labels {
-			qs = append(qs, Noul(l, "Is this about "+l+"?"))
-		}
-		qs = append(qs, Score("urgency", "q", Levels("low", "high")))
-		questions, err := collectQuestions(qs)
-		if err != nil {
-			t.Fatalf("collectQuestions: %v", err)
-		}
-		for _, name := range []string{"billing", "refund", "urgency"} {
-			if _, ok := questions[name]; !ok {
-				t.Errorf("questions is missing %q: %v", name, questions)
-			}
-		}
-		if len(questions) != 3 {
-			t.Errorf("got %d questions, want 3", len(questions))
-		}
-	})
-
-	for _, tt := range []struct {
-		name string
-		args []Question
-	}{
-		{"empty name", []Question{Noul("", "q")}},
-		{"blank name", []Question{Noul("  ", "q")}},
-		{"duplicate name", []Question{Noul("a", "q"), Score("a", "q", Levels("x", "y"))}},
-		{"nil question", []Question{Noul("a", "q"), nil}},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			_, err := collectQuestions(tt.args)
-			if !errors.Is(err, ErrInvalidRequest) {
-				t.Errorf("collectQuestions = %v, want error wrapping ErrInvalidRequest", err)
-			}
-		})
-	}
-}
-
-func TestValidateEvaluateEmptyQuestions(t *testing.T) {
-	err := validateEvaluate("state", map[string]Question{}, "model")
-	if !errors.Is(err, ErrInvalidRequest) {
-		t.Errorf("validateEvaluate with empty questions = %v, want error wrapping ErrInvalidRequest", err)
-	}
-}
-
-func TestValidateEvaluateNilState(t *testing.T) {
-	err := validateEvaluate(nil, map[string]Question{"q": Noul("q", "q")}, "model")
-	if !errors.Is(err, ErrInvalidRequest) {
-		t.Errorf("validateEvaluate with nil state = %v, want error wrapping ErrInvalidRequest", err)
-	}
-}
-
-func TestValidateEvaluateEmptyModel(t *testing.T) {
-	err := validateEvaluate("state", map[string]Question{"q": Noul("q", "q")}, "  ")
-	if !errors.Is(err, ErrInvalidRequest) {
-		t.Errorf("validateEvaluate with blank model = %v, want error wrapping ErrInvalidRequest", err)
-	}
-}
-
-func TestValidateEvaluatePropagatesQuestionError(t *testing.T) {
-	err := validateEvaluate("state", map[string]Question{"bad": ScoreQuestion{Name: "bad", Instructions: "q", Levels: []Content{"only one"}}}, "model")
-	if !errors.Is(err, ErrInvalidRequest) {
-		t.Errorf("validateEvaluate with invalid question = %v, want error wrapping ErrInvalidRequest", err)
 	}
 }
 

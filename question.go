@@ -67,8 +67,8 @@ type NoulCriteria struct {
 // Noul builds a yes/no question named name. Use WithCriteria to
 // clarify what counts as yes or no.
 //
-// This is the question constructor; for a one-shot yes/no call that
-// skips Evaluate and the Answers map entirely, see Client.Noul.
+// For a one-shot call that skips Evaluate and the Answers map, see
+// Client.Noul.
 func Noul(name string, instructions Content) NoulQuestion {
 	return NoulQuestion{Name: name, Instructions: instructions}
 }
@@ -133,8 +133,8 @@ func Names(names ...string) Choices {
 
 // Choice builds a choice question named name over the given choices.
 //
-// This is the question constructor; for a one-shot choice call that
-// skips Evaluate and the Answers map entirely, see Client.Choice.
+// For a one-shot call that skips Evaluate and the Answers map, see
+// Client.Choice.
 func Choice(name string, instructions Content, choices Choices) ChoiceQuestion {
 	return ChoiceQuestion{Name: name, Instructions: instructions, Choices: choices}
 }
@@ -180,8 +180,8 @@ type ScoreQuestion struct {
 // levels, lowest first. [Levels] builds the list from plain strings;
 // a []Content literal allows structured level descriptions.
 //
-// This is the question constructor; for a one-shot score call that
-// skips Evaluate and the Answers map entirely, see [Client.Score].
+// For a one-shot call that skips Evaluate and the Answers map, see
+// [Client.Score].
 func Score(name string, instructions Content, levels []Content) ScoreQuestion {
 	return ScoreQuestion{Name: name, Instructions: instructions, Levels: levels}
 }

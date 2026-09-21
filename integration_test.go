@@ -12,8 +12,9 @@ import (
 )
 
 // TestIntegration exercises a real TypeSafe account: one Evaluate call
-// covering all three question types, plus one Models call. It is
-// skipped unless TYPESAFE_API_KEY is set, so `go test ./...` never
+// covering all three question types, plus one Models call. The
+// integration build tag keeps it out of a plain `go test ./...`, and
+// it skips itself when TYPESAFE_API_KEY is unset, so neither ever
 // needs network access or a live key.
 //
 // Run explicitly with:

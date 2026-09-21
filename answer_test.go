@@ -8,17 +8,6 @@ import (
 	"testing"
 )
 
-// mustDecodeAnswers decodes body as an Answers map, failing the test
-// on a decode error.
-func mustDecodeAnswers(t *testing.T, body string) Answers {
-	t.Helper()
-	var answers Answers
-	if err := json.Unmarshal([]byte(body), &answers); err != nil {
-		t.Fatalf("Unmarshal: %v", err)
-	}
-	return answers
-}
-
 func TestAnswersUnmarshalJSON_Noul(t *testing.T) {
 	body := `{
 		"is_urgent": {"type": "noul", "noul": 0.95}

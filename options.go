@@ -2,8 +2,11 @@ package sys1
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 )
 
@@ -20,9 +23,7 @@ const (
 	DefaultTimeout = 10 * time.Second
 )
 
-// Option configures a Client during New. Option is a function
-// type rather than an interface so callers cannot forge their own
-// options that reach into Client's unexported fields.
+// Option configures a Client during New.
 type Option func(*Client) error
 
 // WithAPIKey sets the API key sent as a Bearer token, overriding
@@ -45,6 +46,23 @@ func WithBaseURL(raw string) Option {
 		c.baseURL = u
 		return nil
 	}
+}
+
+// parseBaseURL trims trailing slashes and validates that raw is an
+// absolute URL.
+func parseBaseURL(raw string) (*url.URL, error) {
+	trimmed := strings.TrimRight(strings.TrimSpace(raw), "/")
+	if trimmed == "" {
+		return nil, fmt.Errorf("sys1: base URL must not be empty")
+	}
+	u, err := url.Parse(trimmed)
+	if err != nil {
+		return nil, fmt.Errorf("sys1: invalid base URL %q: %w", raw, err)
+	}
+	if u.Scheme == "" || u.Host == "" {
+		return nil, fmt.Errorf("sys1: invalid base URL %q: must be absolute", raw)
+	}
+	return u, nil
 }
 
 // withModel sets the default model during construction. It exists
@@ -71,8 +89,8 @@ func WithHTTPClient(hc *http.Client) Option {
 	}
 }
 
-// WithUserAgent appends a suffix to the User-Agent header, after
-// "sys1-go/<Version>".
+// WithUserAgent appends ua to the User-Agent header in parentheses,
+// giving "sys1-go/<Version> (ua)".
 func WithUserAgent(ua string) Option {
 	return func(c *Client) error {
 		c.userAgentSuffix = ua

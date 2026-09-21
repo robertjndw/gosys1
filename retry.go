@@ -60,10 +60,10 @@ func DefaultRetryPolicy() RetryPolicy {
 	}
 }
 
-// validate reports whether the policy's numeric fields are sane. It
-// runs at the start of every request rather than in Client.WithRetry,
-// which keeps derivation infallible and chainable while still failing
-// before any network call.
+// validate checks the policy's numeric fields. It runs at the start of
+// every request rather than in Client.WithRetry so WithRetry can't
+// fail and stays chainable, while a bad policy still errors before
+// anything hits the network.
 func (p RetryPolicy) validate() error {
 	switch {
 	case p.MaxRetries < 0:

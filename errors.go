@@ -1,9 +1,12 @@
 package sys1
 
 import (
+	"cmp"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -159,6 +162,56 @@ func statusText(code int) string {
 		return t
 	}
 	return fmt.Sprintf("status %d", code)
+}
+
+// newAPIError turns a non-2xx response into an *APIError, parsing
+// 422 validation details and best-effort human messages.
+func newAPIError(method string, reqURL *url.URL, status int, header http.Header, body []byte) *APIError {
+	// The recorded URL drops the query string and fragment so an
+	// APIError never leaks a query parameter.
+	safeURL := *reqURL
+	safeURL.RawQuery, safeURL.Fragment = "", ""
+
+	apiErr := &APIError{
+		StatusCode: status,
+		Status:     statusText(status),
+		Method:     method,
+		URL:        safeURL.String(),
+		RequestID:  header.Get(requestIDHeader),
+		Body:       body,
+		Header:     header,
+	}
+	apiErr.RetryAfter, _ = retryAfter(header)
+
+	if status == http.StatusUnprocessableEntity {
+		var verr struct {
+			Detail []ValidationError `json:"detail"`
+		}
+		if err := json.Unmarshal(body, &verr); err == nil && len(verr.Detail) > 0 {
+			apiErr.Details = verr.Detail
+			apiErr.Message = verr.Detail[0].Msg
+			if p := verr.Detail[0].Path(); p != "" {
+				apiErr.Message = p + ": " + apiErr.Message
+			}
+		}
+	}
+
+	if apiErr.Message == "" {
+		var generic struct {
+			Message string `json:"message"`
+			Error   string `json:"error"`
+			Detail  string `json:"detail"`
+		}
+		if err := json.Unmarshal(body, &generic); err == nil {
+			apiErr.Message = cmp.Or(generic.Message, generic.Error, generic.Detail)
+		}
+	}
+
+	if apiErr.Message == "" {
+		apiErr.Message = apiErr.Status
+	}
+
+	return apiErr
 }
 
 // ValidationError describes a single invalid field or value in a

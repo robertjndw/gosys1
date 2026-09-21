@@ -3,7 +3,6 @@ package sys1
 import (
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
 	"strings"
 )
@@ -25,63 +24,8 @@ const (
 	EnvLogLevel = "TYPESAFE_LOG_LEVEL"
 )
 
-// New builds a Client from the TYPESAFE_* environment variables and
-// the given options. Precedence is explicit option, then environment
-// variable, then package default (DefaultBaseURL, DefaultModel,
-// DefaultTimeout and DefaultRetryPolicy), so a shell configured for
-// TypeSafe's official SDKs works here unchanged and any option still
-// wins.
-//
-// The environment variables read are:
-//   - TYPESAFE_API_KEY: the API key (required unless WithAPIKey is given)
-//   - TYPESAFE_BASE_URL: the API base URL, default DefaultBaseURL
-//   - TYPESAFE_DEFAULT_MODEL: the default model, default DefaultModel
-//   - TYPESAFE_LOG_LEVEL: debug, info, warning, error or off; when set
-//     to anything but off, requests are logged to stderr at that level
-//     and above (see WithLogger). Unset or off disables logging.
-//
-// New makes no network call. It returns ErrMissingAPIKey if no API key
-// is available, or an error if the base URL or log level is invalid.
-func New(opts ...Option) (*Client, error) {
-	envOpts, err := optionsFromEnv()
-	if err != nil {
-		return nil, err
-	}
-
-	baseURL, err := parseBaseURL(DefaultBaseURL)
-	if err != nil {
-		return nil, err
-	}
-	c := &Client{
-		baseURL:    baseURL,
-		model:      DefaultModel,
-		httpClient: &http.Client{},
-		timeout:    DefaultTimeout,
-		retry:      DefaultRetryPolicy(),
-		headers:    make(http.Header),
-		sleep:      defaultSleepFunc,
-	}
-
-	// Environment options go first so that explicit options, applied
-	// afterwards, override them.
-	for _, opt := range append(envOpts, opts...) {
-		if opt == nil {
-			continue
-		}
-		if err := opt(c); err != nil {
-			return nil, err
-		}
-	}
-
-	if strings.TrimSpace(c.apiKey) == "" {
-		return nil, ErrMissingAPIKey
-	}
-	return c, nil
-}
-
 // optionsFromEnv translates the TYPESAFE_* environment variables into
-// Options. Expressing the environment as options keeps a single code
-// path for validation and precedence inside New.
+// Options, so New has a single code path for validation and precedence.
 func optionsFromEnv() ([]Option, error) {
 	var opts []Option
 

@@ -143,8 +143,8 @@ func TestNewLogLevel(t *testing.T) {
 			if c.logger == nil {
 				t.Fatal("logger nil, want one configured from the environment")
 			}
-			// The handler must admit exactly the configured level and
-			// above, which is what makes the env var meaningful.
+			// The handler has to filter at exactly the configured level,
+			// otherwise the env var isn't actually doing anything.
 			if !c.logger.Enabled(t.Context(), tc.level) {
 				t.Errorf("logger does not enable %v", tc.level)
 			}

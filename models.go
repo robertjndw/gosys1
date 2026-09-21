@@ -1,8 +1,10 @@
 package sys1
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"time"
 )
 
@@ -70,4 +72,15 @@ func (m Model) MarshalJSON() ([]byte, error) {
 // directly.
 type modelsResponse struct {
 	Models []Model `json:"models"`
+}
+
+// Models lists the models and aliases available to the authenticated
+// account. A returned Model's Name is valid as a request model or as
+// the argument to WithModel.
+func (c *Client) Models(ctx context.Context) ([]Model, error) {
+	var result modelsResponse
+	if _, err := c.do(ctx, http.MethodGet, "/v1/models", nil, &result); err != nil {
+		return nil, err
+	}
+	return result.Models, nil
 }

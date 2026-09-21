@@ -119,7 +119,7 @@ Options:
 - `WithUserAgent(ua string)`
 - `WithLogger(l *slog.Logger)`
 
-Derived clients cover everything else - model, per-attempt timeout, retry policy, headers and extra body fields. `WithModel(name string)`, `WithTimeout(d time.Duration)`, `WithRetry(p RetryPolicy)`, `WithHeader(key, value string)` and `WithExtraBody(fields map[string]any)` are methods on `*Client` that return a modified copy and leave the receiver unchanged, the same shape as `context.WithTimeout` or `slog.Logger.With`. Chain a one-off override straight onto a call:
+Derived clients cover everything else - model, per-attempt timeout (default 10s, see `DefaultTimeout`), retry policy, headers and extra body fields. `WithModel(name string)`, `WithTimeout(d time.Duration)`, `WithRetry(p RetryPolicy)`, `WithHeader(key, value string)` and `WithExtraBody(fields map[string]any)` are methods on `*Client` that return a modified copy and leave the receiver unchanged, the same shape as `context.WithTimeout` or `slog.Logger.With`. Chain a one-off override straight onto a call:
 
 ```go
 resp, err := client.WithModel("jev-1.13.0").Evaluate(ctx, state,
