@@ -15,7 +15,6 @@ func TestNewPrecedence(t *testing.T) {
 		c, err := New(
 			WithAPIKey("opt-key"),
 			WithBaseURL("https://opt.example.com/"),
-			WithModel("opt-model"),
 		)
 		if err != nil {
 			t.Fatalf("New: %v", err)
@@ -26,8 +25,11 @@ func TestNewPrecedence(t *testing.T) {
 		if got := c.baseURL.String(); got != "https://opt.example.com" {
 			t.Errorf("baseURL = %q, want https://opt.example.com", got)
 		}
-		if c.model != "opt-model" {
-			t.Errorf("model = %q, want opt-model", c.model)
+		// The model has no construction-time Option of its own; a
+		// caller overrides the environment by deriving a client with
+		// Client.WithModel instead.
+		if got := c.WithModel("opt-model").model; got != "opt-model" {
+			t.Errorf("WithModel(\"opt-model\").model = %q, want opt-model", got)
 		}
 	})
 

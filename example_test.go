@@ -84,12 +84,12 @@ func ExampleClient_Noul() {
 		return
 	}
 
-	prob, err := client.Noul(context.Background(), "Help! My payouts have been failing for 3 days.", "Does this convey urgency?")
+	answer, err := client.Noul(context.Background(), "Help! My payouts have been failing for 3 days.", "Does this convey urgency?")
 	if err != nil {
 		fmt.Println("error:", err)
 		return
 	}
-	fmt.Printf("%.2f\n", prob)
+	fmt.Printf("%.2f\n", answer.Noul)
 	// Output:
 	// 0.95
 }
@@ -135,14 +135,44 @@ func ExampleClient_Score() {
 		return
 	}
 
-	answer, err := client.Score(context.Background(), "Help! My payouts have been failing for 3 days.", "How frustrated is the customer?", "Calm", "Frustrated", "Very angry")
+	answer, err := client.Score(context.Background(), "Help! My payouts have been failing for 3 days.", "How frustrated is the customer?", sys1.Levels("Calm", "Frustrated", "Very angry"))
 	if err != nil {
 		fmt.Println("error:", err)
 		return
 	}
 	fmt.Printf("%.2f\n", answer.Score)
+	fmt.Println(answer.Label(answer.Nearest()))
 	// Output:
 	// 1.05
+	// Frustrated
+}
+
+func ExampleClient_WithModel() {
+	srv := jsonServer(http.StatusOK, `{
+		"model": "jev-1.13.0",
+		"answers": {"q": {"type": "noul", "noul": 0.95}},
+		"usage": {"input_tokens": 10, "output_tokens": 2}
+	}`)
+	defer srv.Close()
+
+	client, err := sys1.New(sys1.WithAPIKey("sk-example"), sys1.WithBaseURL(srv.URL))
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+
+	// WithModel returns a copy; client itself keeps its own default
+	// model.
+	versioned := client.WithModel("jev-1.13.0")
+
+	answer, err := versioned.Noul(context.Background(), "Help! My payouts have been failing for 3 days.", "Does this convey urgency?")
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	fmt.Printf("%.2f\n", answer.Noul)
+	// Output:
+	// 0.95
 }
 
 func ExampleAnswers_Choice() {
@@ -181,15 +211,12 @@ func ExampleAPIError() {
 	srv := jsonServer(http.StatusUnprocessableEntity, `{"detail": [{"loc": ["body", "questions", "urgency", "criteria"], "msg": "Field required", "type": "missing"}]}`)
 	defer srv.Close()
 
-	client, err := sys1.New(
-		sys1.WithAPIKey("sk-example"),
-		sys1.WithBaseURL(srv.URL),
-		sys1.WithRetry(sys1.RetryPolicy{}), // no retries, for a deterministic example
-	)
+	client, err := sys1.New(sys1.WithAPIKey("sk-example"), sys1.WithBaseURL(srv.URL))
 	if err != nil {
 		fmt.Println("error:", err)
 		return
 	}
+	client = client.WithRetry(sys1.RetryPolicy{}) // no retries, for a deterministic example
 
 	_, err = client.Evaluate(context.Background(), "state", sys1.Noul("q", "q"))
 

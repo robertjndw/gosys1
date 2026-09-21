@@ -27,20 +27,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	tone, err := client.Choice(ctx, state, "What is the tone of this message?", sys1.Choices{
-		"calm":  nil,
-		"angry": nil,
-	})
+	tone, err := client.Choice(ctx, state, "What is the tone of this message?", sys1.Names("calm", "angry"))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "sys1: choice:", err)
 		os.Exit(1)
 	}
 
-	urgency, err := client.Score(ctx, state, "How urgent is this message?", "low", "medium", "high")
+	urgency, err := client.Score(ctx, state, "How urgent is this message?", sys1.Levels("low", "medium", "high"))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "sys1: score:", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("billing=%.2f tone=%s urgency=%.2f\n", billing, tone.Choice, urgency.Score)
+	fmt.Printf("billing=%.2f tone=%s urgency=%.2f\n", billing.Noul, tone.Choice, urgency.Score)
 }

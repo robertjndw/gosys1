@@ -23,11 +23,8 @@ func main() {
 
 	resp, err := client.Evaluate(ctx, state,
 		sys1.Noul("billing", "Is this about a billing issue?"),
-		sys1.Choice("tone", "What is the tone of this message?", sys1.Choices{
-			"calm":  nil,
-			"angry": nil,
-		}),
-		sys1.Score("urgency", "How urgent is this message?", "low", "medium", "high"),
+		sys1.Choice("tone", "What is the tone of this message?", sys1.Names("calm", "angry")),
+		sys1.Score("urgency", "How urgent is this message?", sys1.Levels("low", "medium", "high")),
 	)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "sys1: evaluate:", err)
@@ -51,6 +48,8 @@ func main() {
 	}
 
 	fmt.Printf("billing=%.2f tone=%s urgency=%.2f\n", billing.Noul, tone.Choice, urgency.Score)
+	fmt.Println("tone, most likely first:", tone.Ranked())
+	fmt.Printf("nearest urgency level: %d (%v)\n", urgency.Nearest(), urgency.Label(urgency.Nearest()))
 	fmt.Println("model:", resp.Model)
 	fmt.Printf("usage: input=%d output=%d\n", resp.Usage.InputTokens, resp.Usage.OutputTokens)
 	fmt.Println("request id:", resp.RequestID)

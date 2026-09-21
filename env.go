@@ -41,8 +41,7 @@ const (
 //     and above (see WithLogger). Unset or off disables logging.
 //
 // New makes no network call. It returns ErrMissingAPIKey if no API key
-// is available, or an error if the base URL, log level or retry policy
-// is invalid.
+// is available, or an error if the base URL or log level is invalid.
 func New(opts ...Option) (*Client, error) {
 	envOpts, err := optionsFromEnv()
 	if err != nil {
@@ -93,7 +92,7 @@ func optionsFromEnv() ([]Option, error) {
 		opts = append(opts, WithBaseURL(v))
 	}
 	if v := envValue(EnvModel); v != "" {
-		opts = append(opts, WithModel(v))
+		opts = append(opts, withModel(v))
 	}
 	if v := envValue(EnvLogLevel); v != "" {
 		level, enabled, err := parseLogLevel(v)

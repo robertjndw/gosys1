@@ -41,7 +41,7 @@ func TestIntegration(t *testing.T) {
 			"technical": "Bugs, outages, integrations",
 			"sales":     "Pricing, upgrades, new accounts",
 		}),
-		sys1.Score("frustration", "How frustrated is the customer?", "Calm", "Frustrated", "Very angry"),
+		sys1.Score("frustration", "How frustrated is the customer?", sys1.Levels("Calm", "Frustrated", "Very angry")),
 	)
 	if err != nil {
 		t.Fatalf("Evaluate: %v", err)

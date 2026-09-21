@@ -25,7 +25,7 @@ func main() {
 	// A score question needs at least two levels; this one is rejected
 	// locally and never reaches the network.
 	_, err = client.Evaluate(ctx, "state",
-		sys1.Score("urgency", "How urgent is this?", "only one level"),
+		sys1.Score("urgency", "How urgent is this?", sys1.Levels("only one level")),
 	)
 	if !errors.Is(err, sys1.ErrInvalidRequest) {
 		fmt.Fprintln(os.Stderr, "sys1: expected a client-side validation error, got:", err)

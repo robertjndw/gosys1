@@ -1,7 +1,7 @@
 // Command models lists the models available to the account, then shows how
-// WithModel (a client-wide default) and WithRequestModel (a per-call
-// override) each select which model answers. It requires TYPESAFE_API_KEY
-// in the environment.
+// client.WithModel derives a copy that defaults to a specific model,
+// both built once and reused and chained straight onto a single call.
+// It requires TYPESAFE_API_KEY in the environment.
 package main
 
 import (
@@ -27,14 +27,18 @@ func main() {
 		os.Exit(1)
 	}
 	for _, m := range models {
-		fmt.Printf("%s: %s (released %s)\n", m.Name, m.Description, m.ReleaseDate.Format("2006-01-02"))
+		// A zero ReleaseDate means the API reported no release_date
+		// for this model or alias.
+		released := "unknown"
+		if !m.ReleaseDate.IsZero() {
+			released = m.ReleaseDate.Format("2006-01-02")
+		}
+		fmt.Printf("%s: %s (released %s)\n", m.Name, m.Description, released)
 	}
 
-	versioned, err := sys1.New(sys1.WithModel("jev-1.13.0"))
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "sys1: creating versioned client:", err)
-		os.Exit(1)
-	}
+	// Built once and reused for every call that should default to this
+	// model instead of the account's.
+	versioned := client.WithModel("jev-1.13.0")
 	resp, err := versioned.Evaluate(ctx, "I was charged twice. Please help ASAP.",
 		sys1.Noul("billing", "Is this about a billing issue?"),
 	)
@@ -42,11 +46,12 @@ func main() {
 		fmt.Fprintln(os.Stderr, "sys1: evaluate:", err)
 		os.Exit(1)
 	}
-	fmt.Println("client default model answered as:", resp.Model)
+	fmt.Println("client-wide model override answered as:", resp.Model)
 
-	resp, err = client.Evaluate(ctx, "I was charged twice. Please help ASAP.",
+	// Or chain WithModel straight onto a single call; client itself is
+	// untouched and keeps using its own default model afterward.
+	resp, err = client.WithModel("jev-1.13.0").Evaluate(ctx, "I was charged twice. Please help ASAP.",
 		sys1.Noul("billing", "Is this about a billing issue?"),
-		sys1.WithRequestModel("jev-1.13.0"),
 	)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "sys1: evaluate:", err)

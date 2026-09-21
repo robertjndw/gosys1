@@ -44,11 +44,8 @@ func main() {
 	ctx := context.Background()
 	resp, err := client.Evaluate(ctx, "I was charged twice. Please help ASAP.",
 		sys1.Noul("billing", "Is this about a billing issue?"),
-		sys1.Choice("tone", "What is the tone of this message?", sys1.Choices{
-			"calm":  nil,
-			"angry": nil,
-		}),
-		sys1.Score("urgency", "How urgent is this message?", "low", "medium", "high"),
+		sys1.Choice("tone", "What is the tone of this message?", sys1.Names("calm", "angry")),
+		sys1.Score("urgency", "How urgent is this message?", sys1.Levels("low", "medium", "high")),
 	)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "sys1: evaluate:", err)

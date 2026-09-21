@@ -43,7 +43,8 @@ var (
 	// overloaded.
 	ErrOverloaded = errors.New("sys1: overloaded")
 
-	// ErrServer corresponds to any other 5xx status.
+	// ErrServer corresponds to any 5xx status that has no dedicated
+	// sentinel, so 529 matches ErrOverloaded and not ErrServer.
 	ErrServer = errors.New("sys1: server error")
 
 	// ErrNoAnswer is returned by an Answers accessor when the requested

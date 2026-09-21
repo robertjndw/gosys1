@@ -8,8 +8,9 @@ import (
 
 // Content is the payload carried by state, instructions and criteria
 // values sent to the API. It is documented as string, map[string]any,
-// []any, or a struct that marshals to one of those; nil is allowed
-// wherever the API accepts JSON null.
+// []any, or a struct that marshals to one of those; nil is allowed for
+// optional values such as a choice description or a criteria side, but
+// Evaluate rejects a nil state.
 type Content any
 
 // QuestionType identifies which of the three question shapes a
@@ -23,25 +24,16 @@ const (
 	QuestionScore  QuestionType = "score"
 )
 
-// EvaluateArg is anything Client.Evaluate accepts after state: a named
-// Question, or a RequestOption that adjusts the call itself. Both
-// share one variadic list so a call reads as "this state, these
-// questions, these overrides" without a second signature. EvaluateArg
-// is sealed to this package.
-type EvaluateArg interface {
-	evaluateArg()
-}
-
 // Question is a single named question sent alongside state. It is
 // sealed to this package: NoulQuestion, ChoiceQuestion, ScoreQuestion
 // and RawQuestion are the only implementations, so a type switch over
 // Question is exhaustive.
 type Question interface {
-	EvaluateArg
-
-	// Name reports the key the question is sent under. Its answer
-	// comes back under the same key in Response.Answers.
-	Name() string
+	// name reports the key the question is sent under. Its answer
+	// comes back under the same key in Response.Answers. It is
+	// unexported because a struct with an exported Name field cannot
+	// also have an exported Name method.
+	name() string
 
 	// Type reports the question's wire type.
 	Type() QuestionType
@@ -55,8 +47,8 @@ type Question interface {
 // NoulQuestion is a yes/no question. The answer is the probability
 // that the answer is yes.
 type NoulQuestion struct {
-	// Key is the name the question is sent under.
-	Key string
+	// Name is the name the question is sent under.
+	Name string
 	// Instructions is the yes/no question or statement to evaluate.
 	Instructions Content
 	// Criteria optionally clarifies what counts as a yes or no answer.
@@ -78,7 +70,7 @@ type NoulCriteria struct {
 // This is the question constructor; for a one-shot yes/no call that
 // skips Evaluate and the Answers map entirely, see Client.Noul.
 func Noul(name string, instructions Content) NoulQuestion {
-	return NoulQuestion{Key: name, Instructions: instructions}
+	return NoulQuestion{Name: name, Instructions: instructions}
 }
 
 // WithCriteria returns a copy of q with criteria describing what
@@ -88,15 +80,13 @@ func (q NoulQuestion) WithCriteria(yes, no Content) NoulQuestion {
 	return q
 }
 
-// Name implements Question.
-func (q NoulQuestion) Name() string { return q.Key }
+// name implements Question.
+func (q NoulQuestion) name() string { return q.Name }
 
 // Type implements Question.
 func (q NoulQuestion) Type() QuestionType { return QuestionNoul }
 
 func (q NoulQuestion) validate() error { return nil }
-
-func (q NoulQuestion) evaluateArg() {}
 
 // MarshalJSON implements json.Marshaler.
 func (q NoulQuestion) MarshalJSON() ([]byte, error) {
@@ -113,39 +103,54 @@ func (q NoulQuestion) MarshalJSON() ([]byte, error) {
 // of option name to a description; a nil description means the option
 // is interpreted by its name alone.
 type ChoiceQuestion struct {
-	// Key is the name the question is sent under.
-	Key string
+	// Name is the name the question is sent under.
+	Name string
 	// Instructions is what the model should decide.
 	Instructions Content
-	// Criteria maps each option name to a description, or nil for
+	// Choices maps each option name to a description, or nil for
 	// "name only". It must have between 1 and 255 entries.
-	Criteria Choices
+	Choices Choices
 }
 
 // Choices maps a Choice question's option names to their descriptions.
-// A nil value means the option needs no extra detail.
+// A nil value means the option needs no extra detail; see [Names]
+// for building one from names alone.
 type Choices map[string]Content
+
+// Names builds the Choices for a choice question from option names
+// alone, with no descriptions:
+//
+//	sys1.Choice("tone", "What is the tone?", sys1.Names("calm", "angry"))
+//
+// Use a Choices literal when some options need a description.
+func Names(names ...string) Choices {
+	c := make(Choices, len(names))
+	for _, name := range names {
+		c[name] = nil
+	}
+	return c
+}
 
 // Choice builds a choice question named name over the given choices.
 //
 // This is the question constructor; for a one-shot choice call that
 // skips Evaluate and the Answers map entirely, see Client.Choice.
 func Choice(name string, instructions Content, choices Choices) ChoiceQuestion {
-	return ChoiceQuestion{Key: name, Instructions: instructions, Criteria: choices}
+	return ChoiceQuestion{Name: name, Instructions: instructions, Choices: choices}
 }
 
-// Name implements Question.
-func (q ChoiceQuestion) Name() string { return q.Key }
+// name implements Question.
+func (q ChoiceQuestion) name() string { return q.Name }
 
 // Type implements Question.
 func (q ChoiceQuestion) Type() QuestionType { return QuestionChoice }
 
 func (q ChoiceQuestion) validate() error {
-	n := len(q.Criteria)
+	n := len(q.Choices)
 	if n < 1 || n > 255 {
 		return fmt.Errorf("%w: choice question needs 1 to 255 options, got %d", ErrInvalidRequest, n)
 	}
-	for name := range q.Criteria {
+	for name := range q.Choices {
 		if strings.TrimSpace(name) == "" {
 			return fmt.Errorf("%w: choice question option name must not be empty", ErrInvalidRequest)
 		}
@@ -153,54 +158,66 @@ func (q ChoiceQuestion) validate() error {
 	return nil
 }
 
-func (q ChoiceQuestion) evaluateArg() {}
-
 // MarshalJSON implements json.Marshaler.
 func (q ChoiceQuestion) MarshalJSON() ([]byte, error) {
-	return marshalQuestion(QuestionChoice, q.Instructions, q.Criteria)
+	return marshalQuestion(QuestionChoice, q.Instructions, q.Choices)
 }
 
-// ScoreQuestion rates state along an ordered rubric. Criteria is the
+// ScoreQuestion rates state along an ordered rubric. Levels is the
 // ordered list of level descriptions; the answer is a
 // probability-weighted position among them, starting at 0.
 type ScoreQuestion struct {
-	// Key is the name the question is sent under.
-	Key string
+	// Name is the name the question is sent under.
+	Name string
 	// Instructions is what the model should rate.
 	Instructions Content
-	// Criteria is the ordered list of level descriptions. It must have
+	// Levels is the ordered list of level descriptions. It must have
 	// between 2 and 10 entries.
-	Criteria []Content
+	Levels []Content
 }
 
 // Score builds a score question named name over the given ordered
-// levels.
+// levels, lowest first. [Levels] builds the list from plain strings;
+// a []Content literal allows structured level descriptions.
 //
 // This is the question constructor; for a one-shot score call that
-// skips Evaluate and the Answers map entirely, see Client.Score.
-func Score(name string, instructions Content, levels ...Content) ScoreQuestion {
-	return ScoreQuestion{Key: name, Instructions: instructions, Criteria: levels}
+// skips Evaluate and the Answers map entirely, see [Client.Score].
+func Score(name string, instructions Content, levels []Content) ScoreQuestion {
+	return ScoreQuestion{Name: name, Instructions: instructions, Levels: levels}
 }
 
-// Name implements Question.
-func (q ScoreQuestion) Name() string { return q.Key }
+// Levels builds the ordered level list for a score question from
+// plain strings, lowest first:
+//
+//	sys1.Score("urgency", "How urgent is this?", sys1.Levels("low", "medium", "high"))
+//
+// It accepts an existing []string via levels..., which a []Content
+// parameter alone would not.
+func Levels(levels ...string) []Content {
+	out := make([]Content, len(levels))
+	for i, l := range levels {
+		out[i] = l
+	}
+	return out
+}
+
+// name implements Question.
+func (q ScoreQuestion) name() string { return q.Name }
 
 // Type implements Question.
 func (q ScoreQuestion) Type() QuestionType { return QuestionScore }
 
 func (q ScoreQuestion) validate() error {
-	n := len(q.Criteria)
+	n := len(q.Levels)
 	if n < 2 || n > 10 {
 		return fmt.Errorf("%w: score question needs 2 to 10 levels, got %d", ErrInvalidRequest, n)
 	}
 	return nil
 }
 
-func (q ScoreQuestion) evaluateArg() {}
-
 // MarshalJSON implements json.Marshaler.
 func (q ScoreQuestion) MarshalJSON() ([]byte, error) {
-	return marshalQuestion(QuestionScore, q.Instructions, q.Criteria)
+	return marshalQuestion(QuestionScore, q.Instructions, q.Levels)
 }
 
 // marshalQuestion emits the wire object shared by the typed questions,
@@ -220,19 +237,19 @@ func marshalQuestion(t QuestionType, instructions, criteria Content) ([]byte, er
 // predates: Fields marshals verbatim and is accepted anywhere a
 // Question is, as long as it carries a non-empty string "type" key.
 type RawQuestion struct {
-	// Key is the name the question is sent under.
-	Key string
+	// Name is the name the question is sent under.
+	Name string
 	// Fields is the complete question object as sent to the API.
 	Fields map[string]any
 }
 
 // Raw builds a RawQuestion named name from a verbatim question object.
 func Raw(name string, fields map[string]any) RawQuestion {
-	return RawQuestion{Key: name, Fields: fields}
+	return RawQuestion{Name: name, Fields: fields}
 }
 
-// Name implements Question.
-func (q RawQuestion) Name() string { return q.Key }
+// name implements Question.
+func (q RawQuestion) name() string { return q.Name }
 
 // Type implements Question, reading the "type" key from Fields. It
 // returns "" if the key is missing or not a string.
@@ -250,8 +267,6 @@ func (q RawQuestion) validate() error {
 	}
 	return nil
 }
-
-func (q RawQuestion) evaluateArg() {}
 
 // MarshalJSON implements json.Marshaler, emitting Fields unchanged.
 func (q RawQuestion) MarshalJSON() ([]byte, error) {

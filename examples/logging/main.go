@@ -30,5 +30,5 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("billing=%.2f\n", billing)
+	fmt.Printf("billing=%.2f\n", billing.Noul)
 }

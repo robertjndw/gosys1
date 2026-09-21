@@ -89,10 +89,21 @@ func TestNewInvalidBaseURL(t *testing.T) {
 	}
 }
 
-func TestNewInvalidRetryPolicy(t *testing.T) {
-	_, err := New(WithAPIKey("key"), WithRetry(RetryPolicy{MaxRetries: -1}))
-	if err == nil {
-		t.Fatal("New() error = nil, want error")
+func TestWithRetryInvalidPolicySurfacesFromEvaluateAndModels(t *testing.T) {
+	called := false
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		writeJSON(w, http.StatusOK, noulEvaluateResponse, nil)
+	}).WithRetry(RetryPolicy{MaxRetries: -1})
+
+	if _, err := c.Evaluate(context.Background(), "state", Noul("q", "q")); !errors.Is(err, ErrInvalidRequest) {
+		t.Errorf("Evaluate() error = %v, want ErrInvalidRequest", err)
+	}
+	if _, err := c.Models(context.Background()); !errors.Is(err, ErrInvalidRequest) {
+		t.Errorf("Models() error = %v, want ErrInvalidRequest", err)
+	}
+	if called {
+		t.Error("server was called despite an invalid retry policy")
 	}
 }
 
@@ -161,18 +172,18 @@ func TestEvaluateSendsDocumentedBody(t *testing.T) {
 	}
 }
 
-func TestEvaluateMixesQuestionsAndOptions(t *testing.T) {
+func TestEvaluateSpreadQuestionSlice(t *testing.T) {
 	var gotBody map[string]any
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		gotBody = decodeBody(t, r)
 		writeJSON(w, http.StatusOK, noulEvaluateResponse, nil)
-	})
-	_, err := c.Evaluate(context.Background(), "state",
+	}).WithModel("per-call-model")
+	qs := []Question{
 		Noul("billing", "About billing?"),
-		WithRequestModel("per-call-model"),
 		Choice("tone", "Tone?", Choices{"calm": nil, "angry": nil}),
-		Score("urgency", "Urgency?", "low", "high"),
-	)
+		Score("urgency", "Urgency?", Levels("low", "high")),
+	}
+	_, err := c.Evaluate(context.Background(), "state", qs...)
 	if err != nil {
 		t.Fatalf("Evaluate: %v", err)
 	}
@@ -207,13 +218,14 @@ func TestEvaluateRejectsDuplicateQuestionName(t *testing.T) {
 	}
 }
 
-func TestEvaluateWithRequestModel(t *testing.T) {
+func TestEvaluateUsesDerivedModel(t *testing.T) {
 	var gotModel string
-	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+	base := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		gotModel, _ = decodeBody(t, r)["model"].(string)
 		writeJSON(w, http.StatusOK, noulEvaluateResponse, nil)
-	}, WithModel("client-default-model"))
-	_, err := c.Evaluate(context.Background(), "state", Noul("q", "q"), WithRequestModel("per-call-model"))
+	}).WithModel("client-default-model")
+	c := base.WithModel("per-call-model")
+	_, err := c.Evaluate(context.Background(), "state", Noul("q", "q"))
 	if err != nil {
 		t.Fatalf("Evaluate: %v", err)
 	}
@@ -222,41 +234,53 @@ func TestEvaluateWithRequestModel(t *testing.T) {
 	}
 }
 
-func TestEvaluateWithRequestExtraBody(t *testing.T) {
+func TestEvaluateUsesDerivedExtraBody(t *testing.T) {
 	var gotBody map[string]any
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		gotBody = decodeBody(t, r)
 		writeJSON(w, http.StatusOK, noulEvaluateResponse, nil)
-	})
-	_, err := c.Evaluate(context.Background(), "state", Noul("q", "q"),
-		WithRequestExtraBody(map[string]any{
-			"beam_width": float64(4),
-			"model":      "overridden-model", // collides with the built-in field
-		}),
-	)
+	}).WithExtraBody(map[string]any{"beam_width": float64(4)})
+	_, err := c.Evaluate(context.Background(), "state", Noul("q", "q"))
 	if err != nil {
 		t.Fatalf("Evaluate: %v", err)
 	}
 	if got := gotBody["beam_width"]; got != float64(4) {
 		t.Errorf("beam_width = %v, want 4", got)
 	}
-	if got := gotBody["model"]; got != "overridden-model" {
-		t.Errorf("model = %v, want overridden-model (extra body should win)", got)
+}
+
+func TestEvaluateRejectsExtraBodyCollidingWithBuiltinField(t *testing.T) {
+	for _, key := range []string{"state", "model", "questions"} {
+		t.Run(key, func(t *testing.T) {
+			called := false
+			c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+				called = true
+				writeJSON(w, http.StatusOK, noulEvaluateResponse, nil)
+			}).WithExtraBody(map[string]any{key: "collides"})
+			_, err := c.Evaluate(context.Background(), "state", Noul("q", "q"))
+			if !errors.Is(err, ErrInvalidRequest) {
+				t.Errorf("Evaluate() error = %v, want ErrInvalidRequest", err)
+			}
+			if called {
+				t.Error("server was called despite a colliding extra body field")
+			}
+		})
 	}
 }
 
-func TestEvaluateWithRequestHeader(t *testing.T) {
+func TestEvaluateUsesDerivedHeader(t *testing.T) {
 	var gotHeader string
-	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+	base := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		gotHeader = r.Header.Get("X-Custom")
 		writeJSON(w, http.StatusOK, noulEvaluateResponse, nil)
-	}, WithHeader("X-Custom", "client-value"))
-	_, err := c.Evaluate(context.Background(), "state", Noul("q", "q"), WithRequestHeader("X-Custom", "call-value"))
+	}).WithHeader("X-Custom", "client-value")
+	c := base.WithHeader("X-Custom", "call-value")
+	_, err := c.Evaluate(context.Background(), "state", Noul("q", "q"))
 	if err != nil {
 		t.Fatalf("Evaluate: %v", err)
 	}
 	if gotHeader != "call-value" {
-		t.Errorf("X-Custom = %q, want call-value (request header should win)", gotHeader)
+		t.Errorf("X-Custom = %q, want call-value (the derived header should win)", gotHeader)
 	}
 }
 
@@ -282,12 +306,12 @@ func TestClientShortcuts(t *testing.T) {
 			gotQuestions, _ = decodeBody(t, r)["questions"].(map[string]any)
 			writeJSON(w, http.StatusOK, noulEvaluateResponse, nil)
 		})
-		prob, err := c.Noul(context.Background(), "state", "Is this urgent?")
+		ans, err := c.Noul(context.Background(), "state", "Is this urgent?")
 		if err != nil {
 			t.Fatalf("Noul: %v", err)
 		}
-		if prob != 0.95 {
-			t.Errorf("Noul = %v, want 0.95", prob)
+		if ans.Noul != 0.95 {
+			t.Errorf("Noul.Noul = %v, want 0.95", ans.Noul)
 		}
 		q, ok := gotQuestions["q"].(map[string]any)
 		if !ok || q["type"] != "noul" {
@@ -320,7 +344,7 @@ func TestClientShortcuts(t *testing.T) {
 			gotQuestions, _ = decodeBody(t, r)["questions"].(map[string]any)
 			writeJSON(w, http.StatusOK, scoreEvaluateResponse, nil)
 		})
-		ans, err := c.Score(context.Background(), "state", "Rate this", "low", "high")
+		ans, err := c.Score(context.Background(), "state", "Rate this", Levels("low", "high"))
 		if err != nil {
 			t.Fatalf("Score: %v", err)
 		}
@@ -333,10 +357,24 @@ func TestClientShortcuts(t *testing.T) {
 		}
 	})
 
+	t.Run("Score honours the derived model", func(t *testing.T) {
+		var gotModel any
+		c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+			gotModel = decodeBody(t, r)["model"]
+			writeJSON(w, http.StatusOK, scoreEvaluateResponse, nil)
+		}).WithModel("per-call-model")
+		if _, err := c.Score(context.Background(), "state", "Rate this", Levels("low", "high")); err != nil {
+			t.Fatalf("Score: %v", err)
+		}
+		if gotModel != "per-call-model" {
+			t.Errorf("model = %v, want per-call-model", gotModel)
+		}
+	})
+
 	t.Run("errors pass through unchanged", func(t *testing.T) {
 		c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusTooManyRequests, `{"message": "slow down"}`, nil)
-		}, WithRetry(RetryPolicy{}))
+		}).WithRetry(RetryPolicy{})
 
 		if _, err := c.Noul(context.Background(), "state", "q"); !errors.Is(err, ErrRateLimited) {
 			t.Errorf("Noul() error = %v, want ErrRateLimited", err)
@@ -344,7 +382,7 @@ func TestClientShortcuts(t *testing.T) {
 		if _, err := c.Choice(context.Background(), "state", "q", Choices{"a": nil}); !errors.Is(err, ErrRateLimited) {
 			t.Errorf("Choice() error = %v, want ErrRateLimited", err)
 		}
-		if _, err := c.Score(context.Background(), "state", "q", "a", "b"); !errors.Is(err, ErrRateLimited) {
+		if _, err := c.Score(context.Background(), "state", "q", Levels("a", "b")); !errors.Is(err, ErrRateLimited) {
 			t.Errorf("Score() error = %v, want ErrRateLimited", err)
 		}
 	})
@@ -381,6 +419,45 @@ func TestModelsDecodesReleaseDate(t *testing.T) {
 	}
 }
 
+func TestModelReleaseDateMissingOrEmpty(t *testing.T) {
+	for _, body := range []string{
+		`{"name": "jev-latest", "description": "General-purpose model."}`,
+		`{"name": "jev-latest", "description": "General-purpose model.", "release_date": ""}`,
+	} {
+		var m Model
+		if err := json.Unmarshal([]byte(body), &m); err != nil {
+			t.Fatalf("Unmarshal(%s): %v", body, err)
+		}
+		if !m.ReleaseDate.IsZero() {
+			t.Errorf("ReleaseDate = %v, want zero", m.ReleaseDate)
+		}
+	}
+}
+
+func TestModelReleaseDateMalformedErrors(t *testing.T) {
+	var m Model
+	body := `{"name": "jev-latest", "description": "General-purpose model.", "release_date": "not-a-date"}`
+	if err := json.Unmarshal([]byte(body), &m); err == nil {
+		t.Fatal("Unmarshal() = nil, want error for a malformed release_date")
+	}
+}
+
+func TestModelMarshalJSONOmitsZeroReleaseDate(t *testing.T) {
+	m := Model{Name: "jev-latest", Description: "General-purpose model."}
+	got, err := json.Marshal(m)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	assertJSONEqual(t, got, `{"name": "jev-latest", "description": "General-purpose model."}`)
+
+	m.ReleaseDate = time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC)
+	got, err = json.Marshal(m)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	assertJSONEqual(t, got, `{"name": "jev-latest", "description": "General-purpose model.", "release_date": "2026-09-15"}`)
+}
+
 func TestUnprocessableEntityError(t *testing.T) {
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, `{
@@ -388,7 +465,7 @@ func TestUnprocessableEntityError(t *testing.T) {
 				{"loc": ["body", "questions", "urgency", "criteria"], "msg": "Field required", "type": "missing"}
 			]
 		}`, map[string]string{"x-typesafe-request-id": "req-422"})
-	}, WithRetry(RetryPolicy{}))
+	}).WithRetry(RetryPolicy{})
 	_, err := c.Evaluate(context.Background(), "state", Noul("q", "q"))
 	if err == nil {
 		t.Fatal("Evaluate() error = nil, want error")
@@ -484,12 +561,12 @@ func TestCtxCancellationStopsRetriesImmediately(t *testing.T) {
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		attempts.Add(1)
 		writeJSON(w, http.StatusInternalServerError, `{"message": "boom"}`, nil)
-	}, WithRetry(RetryPolicy{
+	}).WithRetry(RetryPolicy{
 		MaxRetries:      3,
 		InitialBackoff:  time.Millisecond,
 		MaxBackoff:      time.Millisecond,
 		RetryConnErrors: true,
-	}))
+	})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	// Simulate the caller canceling ctx while the client is waiting to
@@ -535,10 +612,9 @@ func TestPerAttemptTimeoutRetried(t *testing.T) {
 			time.Sleep(100 * time.Millisecond)
 		}
 		writeJSON(w, http.StatusOK, noulEvaluateResponse, nil)
-	},
-		WithTimeout(10*time.Millisecond),
-		WithRetry(RetryPolicy{MaxRetries: 1, InitialBackoff: time.Millisecond, RetryConnErrors: true}),
-	)
+	}).
+		WithTimeout(10 * time.Millisecond).
+		WithRetry(RetryPolicy{MaxRetries: 1, InitialBackoff: time.Millisecond, RetryConnErrors: true})
 	_, err := c.Evaluate(context.Background(), "state", Noul("q", "q"))
 	if err != nil {
 		t.Fatalf("Evaluate: %v", err)
@@ -553,7 +629,7 @@ func TestMaxRetriesZeroGivesOneAttempt(t *testing.T) {
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		attempts.Add(1)
 		writeJSON(w, http.StatusInternalServerError, `{"message": "boom"}`, nil)
-	}, WithRetry(RetryPolicy{}))
+	}).WithRetry(RetryPolicy{})
 	_, err := c.Evaluate(context.Background(), "state", Noul("q", "q"))
 	if err == nil {
 		t.Fatal("Evaluate() error = nil, want error")
@@ -569,7 +645,7 @@ func TestMaxRetriesZeroGivesOneAttempt(t *testing.T) {
 func TestRetriesExhaustedWraps(t *testing.T) {
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, `{"message": "boom"}`, nil)
-	}, WithRetry(RetryPolicy{MaxRetries: 2, InitialBackoff: time.Millisecond, RetryConnErrors: true}))
+	}).WithRetry(RetryPolicy{MaxRetries: 2, InitialBackoff: time.Millisecond, RetryConnErrors: true})
 	_, err := c.Evaluate(context.Background(), "state", Noul("q", "q"))
 	if !errors.Is(err, ErrRetriesExhausted) {
 		t.Errorf("error = %v, want ErrRetriesExhausted", err)
@@ -591,7 +667,7 @@ func TestBodyResentIdenticallyOnRetry(t *testing.T) {
 			return
 		}
 		writeJSON(w, http.StatusOK, noulEvaluateResponse, nil)
-	}, WithRetry(RetryPolicy{MaxRetries: 2, InitialBackoff: time.Millisecond, RetryConnErrors: true}))
+	}).WithRetry(RetryPolicy{MaxRetries: 2, InitialBackoff: time.Millisecond, RetryConnErrors: true})
 	_, err := c.Evaluate(context.Background(), "state", Noul("q", "q"))
 	if err != nil {
 		t.Fatalf("Evaluate: %v", err)
@@ -712,5 +788,99 @@ func TestWithUserAgentAppendsSuffix(t *testing.T) {
 	want := fmt.Sprintf("sys1-go/%s (my-app/1.0)", Version)
 	if gotUA != want {
 		t.Errorf("User-Agent = %q, want %q", gotUA, want)
+	}
+}
+
+func TestDerivationMethodsReturnDistinctClientsLeavingParentUnchanged(t *testing.T) {
+	c, err := New(WithAPIKey("key"))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	derived := map[string]*Client{
+		"WithModel":     c.WithModel("other-model"),
+		"WithTimeout":   c.WithTimeout(time.Second),
+		"WithRetry":     c.WithRetry(RetryPolicy{MaxRetries: 5}),
+		"WithHeader":    c.WithHeader("X-Test", "v"),
+		"WithExtraBody": c.WithExtraBody(map[string]any{"k": "v"}),
+	}
+	for name, d := range derived {
+		if d == c {
+			t.Errorf("%s returned the receiver, want a distinct *Client", name)
+		}
+	}
+
+	if c.model != DefaultModel {
+		t.Errorf("parent model = %q, want unchanged %q", c.model, DefaultModel)
+	}
+	if c.timeout != DefaultTimeout {
+		t.Errorf("parent timeout = %v, want unchanged %v", c.timeout, DefaultTimeout)
+	}
+	if !reflect.DeepEqual(c.retry, DefaultRetryPolicy()) {
+		t.Errorf("parent retry = %+v, want unchanged default", c.retry)
+	}
+	if len(c.headers) != 0 {
+		t.Errorf("parent headers = %v, want empty", c.headers)
+	}
+	if c.extraBody != nil {
+		t.Errorf("parent extraBody = %v, want nil", c.extraBody)
+	}
+}
+
+func TestWithHeaderChildHeaderNeverReachesParentRequests(t *testing.T) {
+	var gotHeader string
+	base := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		gotHeader = r.Header.Get("X-Custom")
+		writeJSON(w, http.StatusOK, noulEvaluateResponse, nil)
+	})
+	child := base.WithHeader("X-Custom", "child-value")
+
+	if _, err := base.Evaluate(context.Background(), "state", Noul("q", "q")); err != nil {
+		t.Fatalf("Evaluate (parent): %v", err)
+	}
+	if gotHeader != "" {
+		t.Errorf("parent request sent X-Custom = %q, want empty", gotHeader)
+	}
+
+	if _, err := child.Evaluate(context.Background(), "state", Noul("q", "q")); err != nil {
+		t.Fatalf("Evaluate (child): %v", err)
+	}
+	if gotHeader != "child-value" {
+		t.Errorf("child request sent X-Custom = %q, want child-value", gotHeader)
+	}
+}
+
+func TestDerivationNeverAliasesParentHeaders(t *testing.T) {
+	base, err := New(WithAPIKey("key"))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	// child is derived through a method that never touches headers.
+	// If the header map were shared rather than cloned on every
+	// derivation, a header added to base afterward would leak into
+	// child even though child predates it.
+	child := base.WithModel("child-model")
+	_ = base.WithHeader("X-Custom", "parent-value")
+
+	if _, ok := child.headers["X-Custom"]; ok {
+		t.Error("a header added to the parent after deriving a child leaked into the child")
+	}
+	if _, ok := base.headers["X-Custom"]; ok {
+		t.Error("WithHeader mutated the receiver's own headers")
+	}
+}
+
+func TestWithTimeoutZeroAndNegativeDisablePerAttemptTimeout(t *testing.T) {
+	for _, d := range []time.Duration{0, -time.Second} {
+		t.Run(d.String(), func(t *testing.T) {
+			c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+				time.Sleep(30 * time.Millisecond)
+				writeJSON(w, http.StatusOK, noulEvaluateResponse, nil)
+			}).WithTimeout(5 * time.Millisecond).WithTimeout(d)
+			if _, err := c.Evaluate(context.Background(), "state", Noul("q", "q")); err != nil {
+				t.Fatalf("Evaluate: %v, want nil (per-attempt timeout should be disabled)", err)
+			}
+		})
 	}
 }

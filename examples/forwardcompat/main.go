@@ -1,6 +1,6 @@
 // Command forwardcompat sends fields this library predates - a sys1.Raw
 // question with an extra "weight" key and a top-level "beam_width" via
-// WithRequestExtraBody - and shows an unrecognized answer type decoding as
+// client.WithExtraBody - and shows an unrecognized answer type decoding as
 // a RawAnswer instead of failing. The extra fields are illustrative only:
 // the live API may reject them with a 422. Requires TYPESAFE_API_KEY.
 package main
@@ -20,6 +20,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	client = client.WithExtraBody(map[string]any{"beam_width": 4})
+
 	ctx := context.Background()
 
 	resp, err := client.Evaluate(ctx, "I was charged twice. Please help ASAP.",
@@ -28,7 +30,6 @@ func main() {
 			"instructions": "About billing?",
 			"weight":       2,
 		}),
-		sys1.WithRequestExtraBody(map[string]any{"beam_width": 4}),
 	)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "sys1: evaluate:", err)

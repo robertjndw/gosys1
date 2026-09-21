@@ -123,22 +123,22 @@ func TestScoreQuestionMarshalJSON(t *testing.T) {
 	}{
 		{
 			name: "levels",
-			q:    Score("q", "How frustrated is the customer?", "Calm", "Frustrated", "Very angry"),
+			q:    Score("q", "How frustrated is the customer?", Levels("Calm", "Frustrated", "Very angry")),
 			want: `{"type":"score","instructions":"How frustrated is the customer?","criteria":["Calm","Frustrated","Very angry"]}`,
 		},
 		{
 			name: "object instructions",
-			q:    Score("q", map[string]any{"question": "Rate urgency"}, "low", "high"),
+			q:    Score("q", map[string]any{"question": "Rate urgency"}, Levels("low", "high")),
 			want: `{"type":"score","instructions":{"question":"Rate urgency"},"criteria":["low","high"]}`,
 		},
 		{
 			name: "array instructions",
-			q:    Score("q", []any{"a", "b"}, "low", "high"),
+			q:    Score("q", []any{"a", "b"}, Levels("low", "high")),
 			want: `{"type":"score","instructions":["a","b"],"criteria":["low","high"]}`,
 		},
 		{
 			name: "structured levels",
-			q:    Score("q", "Rate this", map[string]any{"label": "low"}, map[string]any{"label": "high"}),
+			q:    Score("q", "Rate this", []Content{map[string]any{"label": "low"}, map[string]any{"label": "high"}}),
 			want: `{"type":"score","instructions":"Rate this","criteria":[{"label":"low"},{"label":"high"}]}`,
 		},
 	}
@@ -162,16 +162,16 @@ func TestQuestionValidate(t *testing.T) {
 	}{
 		{"noul, no criteria", Noul("q", "q"), false},
 		{"noul, with criteria", Noul("q", "q").WithCriteria("y", "n"), false},
-		{"choice, 0 options", ChoiceQuestion{Instructions: "q", Criteria: Choices{}}, true},
-		{"choice, 1 option", ChoiceQuestion{Instructions: "q", Criteria: Choices{"a": nil}}, false},
-		{"choice, 255 options", ChoiceQuestion{Instructions: "q", Criteria: manyChoices(255)}, false},
-		{"choice, 256 options", ChoiceQuestion{Instructions: "q", Criteria: manyChoices(256)}, true},
-		{"choice, empty option name", ChoiceQuestion{Instructions: "q", Criteria: Choices{"": nil}}, true},
-		{"score, 0 levels", ScoreQuestion{Instructions: "q", Criteria: nil}, true},
-		{"score, 1 level", ScoreQuestion{Instructions: "q", Criteria: []Content{"a"}}, true},
-		{"score, 2 levels", ScoreQuestion{Instructions: "q", Criteria: []Content{"a", "b"}}, false},
-		{"score, 10 levels", ScoreQuestion{Instructions: "q", Criteria: manyLevels(10)}, false},
-		{"score, 11 levels", ScoreQuestion{Instructions: "q", Criteria: manyLevels(11)}, true},
+		{"choice, 0 options", ChoiceQuestion{Instructions: "q", Choices: Choices{}}, true},
+		{"choice, 1 option", ChoiceQuestion{Instructions: "q", Choices: Choices{"a": nil}}, false},
+		{"choice, 255 options", ChoiceQuestion{Instructions: "q", Choices: manyChoices(255)}, false},
+		{"choice, 256 options", ChoiceQuestion{Instructions: "q", Choices: manyChoices(256)}, true},
+		{"choice, empty option name", ChoiceQuestion{Instructions: "q", Choices: Choices{"": nil}}, true},
+		{"score, 0 levels", ScoreQuestion{Instructions: "q", Levels: nil}, true},
+		{"score, 1 level", ScoreQuestion{Instructions: "q", Levels: []Content{"a"}}, true},
+		{"score, 2 levels", ScoreQuestion{Instructions: "q", Levels: []Content{"a", "b"}}, false},
+		{"score, 10 levels", ScoreQuestion{Instructions: "q", Levels: manyLevels(10)}, false},
+		{"score, 11 levels", ScoreQuestion{Instructions: "q", Levels: manyLevels(11)}, true},
 	}
 
 	for _, tt := range tests {
@@ -221,8 +221,8 @@ func TestRawQuestion(t *testing.T) {
 
 	t.Run("Name", func(t *testing.T) {
 		q := Raw("billing", map[string]any{"type": "noul"})
-		if got := q.Name(); got != "billing" {
-			t.Errorf("Name() = %q, want billing", got)
+		if q.Name != "billing" {
+			t.Errorf("Name = %q, want billing", q.Name)
 		}
 	})
 
@@ -273,27 +273,26 @@ func TestQuestionName(t *testing.T) {
 	}{
 		{"noul", Noul("noul_q", "q")},
 		{"choice", Choice("choice_q", "q", Choices{"a": nil})},
-		{"score", Score("score_q", "q", "a", "b")},
+		{"score", Score("score_q", "q", Levels("a", "b"))},
 		{"raw", Raw("raw_q", map[string]any{"type": "noul"})},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.q.Name(); got != tt.name+"_q" {
-				t.Errorf("Name() = %q, want %q", got, tt.name+"_q")
+			if got := tt.q.name(); got != tt.name+"_q" {
+				t.Errorf("name() = %q, want %q", got, tt.name+"_q")
 			}
 		})
 	}
 }
 
-func TestCollectEvaluateArgs(t *testing.T) {
-	t.Run("questions keyed by name, options applied", func(t *testing.T) {
-		questions, rc, err := collectEvaluateArgs([]EvaluateArg{
+func TestCollectQuestions(t *testing.T) {
+	t.Run("questions keyed by name", func(t *testing.T) {
+		questions, err := collectQuestions([]Question{
 			Noul("a", "q"),
-			WithRequestModel("m"),
-			Score("b", "q", "low", "high"),
+			Score("b", "q", Levels("low", "high")),
 		})
 		if err != nil {
-			t.Fatalf("collectEvaluateArgs: %v", err)
+			t.Fatalf("collectQuestions: %v", err)
 		}
 		if len(questions) != 2 {
 			t.Fatalf("got %d questions, want 2", len(questions))
@@ -304,31 +303,42 @@ func TestCollectEvaluateArgs(t *testing.T) {
 		if _, ok := questions["b"].(ScoreQuestion); !ok {
 			t.Errorf("questions[b] = %T, want ScoreQuestion", questions["b"])
 		}
-		if rc.model != "m" {
-			t.Errorf("rc.model = %q, want m", rc.model)
-		}
 	})
 
-	t.Run("nil option is ignored", func(t *testing.T) {
-		var opt RequestOption
-		if _, _, err := collectEvaluateArgs([]EvaluateArg{Noul("a", "q"), opt}); err != nil {
-			t.Errorf("collectEvaluateArgs = %v, want nil", err)
+	t.Run("a []Question built at runtime spreads like literal questions", func(t *testing.T) {
+		labels := []string{"billing", "refund"}
+		var qs []Question
+		for _, l := range labels {
+			qs = append(qs, Noul(l, "Is this about "+l+"?"))
+		}
+		qs = append(qs, Score("urgency", "q", Levels("low", "high")))
+		questions, err := collectQuestions(qs)
+		if err != nil {
+			t.Fatalf("collectQuestions: %v", err)
+		}
+		for _, name := range []string{"billing", "refund", "urgency"} {
+			if _, ok := questions[name]; !ok {
+				t.Errorf("questions is missing %q: %v", name, questions)
+			}
+		}
+		if len(questions) != 3 {
+			t.Errorf("got %d questions, want 3", len(questions))
 		}
 	})
 
 	for _, tt := range []struct {
 		name string
-		args []EvaluateArg
+		args []Question
 	}{
-		{"empty name", []EvaluateArg{Noul("", "q")}},
-		{"blank name", []EvaluateArg{Noul("  ", "q")}},
-		{"duplicate name", []EvaluateArg{Noul("a", "q"), Score("a", "q", "x", "y")}},
-		{"nil argument", []EvaluateArg{Noul("a", "q"), nil}},
+		{"empty name", []Question{Noul("", "q")}},
+		{"blank name", []Question{Noul("  ", "q")}},
+		{"duplicate name", []Question{Noul("a", "q"), Score("a", "q", Levels("x", "y"))}},
+		{"nil question", []Question{Noul("a", "q"), nil}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			_, _, err := collectEvaluateArgs(tt.args)
+			_, err := collectQuestions(tt.args)
 			if !errors.Is(err, ErrInvalidRequest) {
-				t.Errorf("collectEvaluateArgs = %v, want error wrapping ErrInvalidRequest", err)
+				t.Errorf("collectQuestions = %v, want error wrapping ErrInvalidRequest", err)
 			}
 		})
 	}
@@ -356,8 +366,42 @@ func TestValidateEvaluateEmptyModel(t *testing.T) {
 }
 
 func TestValidateEvaluatePropagatesQuestionError(t *testing.T) {
-	err := validateEvaluate("state", map[string]Question{"bad": ScoreQuestion{Key: "bad", Instructions: "q", Criteria: []Content{"only one"}}}, "model")
+	err := validateEvaluate("state", map[string]Question{"bad": ScoreQuestion{Name: "bad", Instructions: "q", Levels: []Content{"only one"}}}, "model")
 	if !errors.Is(err, ErrInvalidRequest) {
 		t.Errorf("validateEvaluate with invalid question = %v, want error wrapping ErrInvalidRequest", err)
+	}
+}
+
+func TestNames(t *testing.T) {
+	got := Names("calm", "angry")
+	want := Choices{"calm": nil, "angry": nil}
+	if len(got) != len(want) {
+		t.Fatalf("Names() = %v, want %v", got, want)
+	}
+	for name := range want {
+		if v, ok := got[name]; !ok || v != nil {
+			t.Errorf("Names()[%q] = %v, %v, want nil, true", name, v, ok)
+		}
+	}
+	if got := Names(); len(got) != 0 {
+		t.Errorf("Names() with no names = %v, want empty", got)
+	}
+}
+
+func TestLevels(t *testing.T) {
+	// The point of Levels is that an existing []string can be splatted
+	// into it, which a []Content parameter alone would reject.
+	names := []string{"low", "medium", "high"}
+	got := Levels(names...)
+	if len(got) != 3 {
+		t.Fatalf("Levels() has %d entries, want 3", len(got))
+	}
+	for i, name := range names {
+		if got[i] != name {
+			t.Errorf("Levels()[%d] = %v, want %q", i, got[i], name)
+		}
+	}
+	if got := Levels(); len(got) != 0 {
+		t.Errorf("Levels() with no names = %v, want empty", got)
 	}
 }

@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/robertjndw/gosys1"
+	sys1 "github.com/robertjndw/gosys1"
 )
 
 func main() {
@@ -34,11 +34,8 @@ func main() {
 
 	resp, err := client.Evaluate(ctx, state,
 		sys1.Noul("billing", "Is this about a billing issue?"),
-		sys1.Choice("tone", "What is the tone of this message?", sys1.Choices{
-			"calm":  nil,
-			"angry": nil,
-		}),
-		sys1.Score("urgency", "How urgent is this message?", "low", "medium", "high"),
+		sys1.Choice("tone", "What is the tone of this message?", sys1.Names("calm", "angry")),
+		sys1.Score("urgency", "How urgent is this message?", sys1.Levels("low", "medium", "high")),
 	)
 	if err != nil {
 		log.Fatal(err)
@@ -50,7 +47,7 @@ func main() {
 
 	fmt.Printf("billing: %.2f\n", billing.Noul)
 	fmt.Printf("tone: %s (confidence %.2f)\n", tone.Choice, tone.Confidence)
-	fmt.Printf("urgency: %.2f\n", urgency.Score)
+	fmt.Printf("urgency: %.2f, nearest level %v\n", urgency.Score, urgency.Label(urgency.Nearest()))
 }
 ```
 
@@ -58,20 +55,57 @@ func main() {
 
 `Evaluate` takes one state and as many questions as you like. Each question is built with `sys1.Noul`, `sys1.Choice` or `sys1.Score` and carries the name its answer comes back under, which is also how the API keys them on the wire. A blank or duplicate name is rejected locally with `ErrInvalidRequest`.
 
+## The three questions
+
+| Question | Answer | Use it for |
+|---|---|---|
+| `Noul` | a `NoulAnswer` whose `Noul` field is the probability that the answer is yes, from 0 to 1 | whether a condition holds; one per label when several can apply at once |
+| `Choice` | one option plus the full distribution | picking from a set you define |
+| `Score` | a probability-weighted position across ordered levels | a degree along a described dimension |
+
+`sys1.Names("calm", "angry")` builds the choices for a `Choice` whose option names speak for themselves; use a `sys1.Choices{"billing": "Payments, invoicing, refunds", ...}` literal when they need descriptions. `sys1.Levels("low", "medium", "high")` builds a `Score`'s ordered levels from plain strings and accepts an existing `[]string` via `levels...`. `sys1.Noul(name, q).WithCriteria(yes, no)` sharpens a yes/no question by describing what each side means.
+
+A battery built at runtime, such as one `Noul` per label, is a plain `[]sys1.Question` spread with `qs...`:
+
+```go
+var qs []sys1.Question
+for _, label := range labels {
+	qs = append(qs, sys1.Noul(label, "Is this about "+label+"?"))
+}
+resp, err := client.Evaluate(ctx, state, qs...)
+```
+
 For a single question, skip `Evaluate` and the `Answers` map with the shortcuts:
 
 ```go
-billingProb, err := client.Noul(ctx, state, "Is this about a billing issue?")
+billingAnswer, err := client.Noul(ctx, state, "Is this about a billing issue?")
 
-toneAnswer, err := client.Choice(ctx, state, "What is the tone of this message?", sys1.Choices{
-	"calm":  nil,
-	"angry": nil,
-})
+toneAnswer, err := client.Choice(ctx, state, "What is the tone of this message?", sys1.Names("calm", "angry"))
 
-urgencyAnswer, err := client.Score(ctx, state, "How urgent is this message?", "low", "medium", "high")
+urgencyAnswer, err := client.Score(ctx, state, "How urgent is this message?", sys1.Levels("low", "medium", "high"))
 ```
 
-`Noul` returns the bare probability. `Choice` and `Score` return the answer struct, since their confidence and probabilities matter for routing. `resp.Model`, `resp.Usage` and `resp.RequestID` are only available through `Evaluate`.
+`Noul`, `Choice` and `Score` all return their answer struct directly, skipping the `Answers` map. `resp.Model`, `resp.Usage` and `resp.RequestID` are only available through `Evaluate`.
+
+## Reading answers
+
+```go
+p, err := resp.Answers.Noul("billing")     // NoulAnswer
+c, err := resp.Answers.Choice("tone")      // Choice, Probabilities, Confidence
+s, err := resp.Answers.Score("urgency")    // Score, Legend, Probabilities, Confidence
+
+fmt.Println(p.Noul)                    // probability of yes, 0 to 1
+ranked := c.Ranked()                   // options, most probable first
+level := s.Nearest()                   // closest whole level, e.g. 2
+label := s.Label(level)                // its description, e.g. "high"
+prob := s.Probability(level)           // its probability
+```
+
+`ScoreAnswer.Legend` and `ScoreAnswer.Probabilities` are slices ordered by level, lowest first, so `s.Legend[level]` and `s.Probabilities[level]` line up with each other and with `s.Nearest()`.
+
+A missing name returns an error wrapping `ErrNoAnswer`, and reading an answer as the wrong type returns one wrapping `ErrAnswerType`; neither panics. Ranging over `resp.Answers` directly gives the concrete `NoulAnswer`, `ChoiceAnswer`, `ScoreAnswer` or `RawAnswer` values for a type switch.
+
+Keep the thresholds that act on these values in your own code. The model reports what it found; your policy decides what to do about it, and can change without re-running inference.
 
 ## Configuration
 
@@ -81,22 +115,25 @@ Options:
 
 - `WithAPIKey(key string)`
 - `WithBaseURL(raw string)`
-- `WithModel(name string)`
 - `WithHTTPClient(hc *http.Client)`
-- `WithTimeout(d time.Duration)` - per attempt, not the total call
-- `WithRetry(p RetryPolicy)`
-- `WithHeader(key, value string)`
 - `WithUserAgent(ua string)`
 - `WithLogger(l *slog.Logger)`
 
-`RequestOption`s override the client's defaults for a single `Evaluate` or `Models` call: `WithRequestModel`, `WithRequestHeader`, `WithRequestRetry`, `WithRequestExtraBody`. In `Evaluate` they sit in the same variadic list as the questions, in any position:
+Derived clients cover everything else - model, per-attempt timeout, retry policy, headers and extra body fields. `WithModel(name string)`, `WithTimeout(d time.Duration)`, `WithRetry(p RetryPolicy)`, `WithHeader(key, value string)` and `WithExtraBody(fields map[string]any)` are methods on `*Client` that return a modified copy and leave the receiver unchanged, the same shape as `context.WithTimeout` or `slog.Logger.With`. Chain a one-off override straight onto a call:
 
 ```go
-resp, err := client.Evaluate(ctx, state,
+resp, err := client.WithModel("jev-1.13.0").Evaluate(ctx, state,
 	sys1.Noul("billing", "Is this about a billing issue?"),
-	sys1.WithRequestModel("jev-1.13.0"),
 )
 ```
+
+or build one once and reuse it:
+
+```go
+fast := client.WithModel("jev-1.13.0").WithRetry(sys1.RetryPolicy{})
+```
+
+Each derived client is as safe for concurrent use as its parent.
 
 Environment variables read by `New`:
 
@@ -107,7 +144,7 @@ Environment variables read by `New`:
 | `TYPESAFE_DEFAULT_MODEL` | default model for `Evaluate` and the shortcuts | `jev-latest` |
 | `TYPESAFE_LOG_LEVEL` | `debug`, `info`, `warning`, `error` or `off`; logs to stderr at that level | unset, no logging |
 
-Precedence is explicit option, then environment variable, then default. A blank or whitespace-only environment variable is treated as unset. `debug` logs every attempt; `info` logs each scheduled retry.
+Precedence is explicit option, then environment variable, then default. A blank or whitespace-only environment variable is treated as unset. `debug` logs every attempt; `info` logs each scheduled retry. `TYPESAFE_DEFAULT_MODEL` sets the model at `New` time; to change it in code instead, derive with `client.WithModel(...)`.
 
 ## Retries
 
@@ -128,15 +165,14 @@ Retried: 408, 429, any 5xx status and connection errors. A caller's context canc
 Override client-wide:
 
 ```go
-client, err := sys1.New(sys1.WithRetry(sys1.RetryPolicy{MaxRetries: 5}))
+client = client.WithRetry(sys1.RetryPolicy{MaxRetries: 5})
 ```
 
-Override per call:
+Override per use:
 
 ```go
-resp, err := client.Evaluate(ctx, state,
+resp, err := client.WithRetry(sys1.RetryPolicy{MaxRetries: 0}).Evaluate(ctx, state,
 	sys1.Noul("billing", "Is this about a billing issue?"),
-	sys1.WithRequestRetry(sys1.RetryPolicy{MaxRetries: 0}),
 )
 ```
 
@@ -162,7 +198,7 @@ A 422 response fills `APIError.Details` with `[]ValidationError`, one per invali
 
 ## Forward compatibility
 
-`sys1.Raw(name, fields)` builds a `RawQuestion` whose `Fields` map marshals verbatim, for question fields this library predates. `WithRequestExtraBody` adds extra top-level fields to a request body, shallow-merged over `state`, `model` and `questions`. Any answer with a `"type"` this library does not recognize decodes as a `RawAnswer` holding the raw JSON, instead of failing.
+`sys1.Raw(name, fields)` builds a `RawQuestion` whose `Fields` map marshals verbatim, for question fields this library predates. `client.WithExtraBody(fields)` derives a client that adds extra top-level fields to a request body. Fields must not be named `state`, `model` or `questions`; `Evaluate` rejects a field with one of those names with an error wrapping `ErrInvalidRequest`, before any network call, since it would collide with a built-in field. Any answer with a `"type"` this library does not recognize decodes as a `RawAnswer` holding the raw JSON, instead of failing.
 
 ## Examples
 
@@ -170,18 +206,34 @@ A 422 response fills `APIError.Details` with `[]ValidationError`, one per invali
 |---|---|
 | `examples/basic` | One `Evaluate` call with the guide's billing example: `Noul` billing, `Choice` tone, `Score` urgency, read with the typed accessors |
 | `examples/shortcuts` | The same three questions asked through `client.Noul`, `client.Choice` and `client.Score` |
+| `examples/labels` | A battery built at runtime, one `Noul` per label, sent as a `[]sys1.Question` spread with `questions...` |
 | `examples/typed` | Decoding answers into a caller-owned struct instead of touching the `Answers` map directly |
-| `examples/models` | `client.Models`, plus `WithModel` and `WithRequestModel` to pick a specific version |
-| `examples/retries` | A client-wide `RetryPolicy`, a per-call override with `WithRequestRetry`, and a `context.WithTimeout` as the total budget |
+| `examples/models` | `client.Models`, plus `client.WithModel` to pick a specific version, both built once and reused and chained onto a single call |
+| `examples/retries` | A client-wide `RetryPolicy` built once with `WithRetry`, a one-off chained override, and a `context.WithTimeout` as the total budget |
 | `examples/errors` | `errors.As` and `errors.Is`, reading `ValidationError.Path()` for a 422, and a client-side `ErrInvalidRequest` |
 | `examples/logging` | `WithLogger` and the per-request debug lines it produces |
-| `examples/config` | `New()` picking up environment variables, then explicit options overriding them |
-| `examples/forwardcompat` | `sys1.Raw`, `WithRequestExtraBody` and handling `RawAnswer` in a type switch |
+| `examples/config` | `New()` picking up environment variables, then `client.WithModel` and `client.WithTimeout` deriving from it |
+| `examples/forwardcompat` | `sys1.Raw`, `client.WithExtraBody` and handling `RawAnswer` in a type switch |
 
 Each runs the same way:
 
 ```sh
 TYPESAFE_API_KEY=... go run ./examples/basic
+```
+
+## Testing your code
+
+`Client` is a concrete type with no interface to mock. Point it at an `httptest.Server` with `WithBaseURL` and assert on the request body the fake receives, or supply an `*http.Client` with a custom `RoundTripper` through `WithHTTPClient`:
+
+```go
+srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	io.WriteString(w, `{"model":"jev-1.13.0","answers":{"billing":{"type":"noul","noul":0.95}},"usage":{"input_tokens":1,"output_tokens":1}}`)
+}))
+defer srv.Close()
+
+client, err := sys1.New(sys1.WithAPIKey("test"), sys1.WithBaseURL(srv.URL))
+client = client.WithRetry(sys1.RetryPolicy{})
 ```
 
 ## Development

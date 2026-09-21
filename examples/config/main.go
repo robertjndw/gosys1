@@ -1,6 +1,8 @@
 // Command config shows which of TYPESAFE_API_KEY, TYPESAFE_BASE_URL,
 // TYPESAFE_DEFAULT_MODEL and TYPESAFE_LOG_LEVEL New picks up from the
-// environment, and that explicit options override them. It requires
+// environment, an explicit WithBaseURL option overriding it, and
+// client.WithModel and client.WithTimeout deriving a copy that
+// overrides the model and per-attempt timeout in code. It requires
 // TYPESAFE_API_KEY; the other three are optional.
 package main
 
@@ -8,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	sys1 "github.com/robertjndw/gosys1"
 )
@@ -24,18 +27,27 @@ func main() {
 	// Precedence is explicit option, then environment variable, then
 	// package default; New applies it, so nothing here needs to
 	// re-derive the effective values.
-	if _, err := sys1.New(); err != nil {
+	client, err := sys1.New()
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "sys1: creating client from environment:", err)
 		os.Exit(1)
 	}
 	fmt.Println("client built from environment and defaults")
 
 	const explicitBaseURL = "https://staging.typesafe.ai"
-	const explicitModel = "jev-1.13.0"
-	if _, err := sys1.New(sys1.WithBaseURL(explicitBaseURL), sys1.WithModel(explicitModel)); err != nil {
-		fmt.Fprintln(os.Stderr, "sys1: creating client with explicit options:", err)
+	if _, err := sys1.New(sys1.WithBaseURL(explicitBaseURL)); err != nil {
+		fmt.Fprintln(os.Stderr, "sys1: creating client with explicit base URL:", err)
 		os.Exit(1)
 	}
-	fmt.Printf("client built with explicit base URL %s and model %s, overriding %s and %s\n",
-		explicitBaseURL, explicitModel, sys1.EnvBaseURL, sys1.EnvModel)
+	fmt.Printf("client built with explicit base URL %s, overriding %s\n", explicitBaseURL, sys1.EnvBaseURL)
+
+	// TYPESAFE_DEFAULT_MODEL sets the model at New time; to change it,
+	// or the per-attempt timeout, in code instead, derive a copy.
+	// client itself is unchanged.
+	const explicitModel = "jev-1.13.0"
+	const explicitTimeout = 3 * time.Second
+	tuned := client.WithModel(explicitModel).WithTimeout(explicitTimeout)
+	_ = tuned // ready for calls; this example makes none
+	fmt.Printf("derived client uses model %s with a %s per-attempt timeout, overriding %s\n",
+		explicitModel, explicitTimeout, sys1.EnvModel)
 }

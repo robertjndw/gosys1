@@ -1,8 +1,12 @@
 package sys1
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"math"
+	"slices"
 	"strconv"
 )
 
@@ -30,7 +34,8 @@ type Answer interface {
 
 // NoulAnswer is the answer to a NoulQuestion.
 type NoulAnswer struct {
-	// Noul is the probability of a yes answer, from 0 to 1.
+	// Noul is the probability that the answer is yes, on a scale from
+	// 0 (no) to 1 (yes).
 	Noul float64 `json:"noul"`
 }
 
@@ -79,15 +84,15 @@ func (a ChoiceAnswer) MarshalJSON() ([]byte, error) {
 type ScoreAnswer struct {
 	// Score is the probability-weighted answer across the levels; it
 	// can land between levels.
-	Score float64 `json:"score"`
-	// Legend maps each level index (as a string key, "0", "1", ...) to
-	// its description.
-	Legend map[string]Content `json:"legend"`
-	// Probabilities maps each level index (as a string key, matching
-	// Legend) to its probability.
-	Probabilities map[string]float64 `json:"probabilities"`
+	Score float64
+	// Legend holds each level's description, lowest level first,
+	// exactly as the question sent it.
+	Legend []Content
+	// Probabilities holds each level's probability, indexed like
+	// Legend.
+	Probabilities []float64
 	// Confidence is how certain the model is, from 0 to 1.
-	Confidence float64 `json:"confidence"`
+	Confidence float64
 }
 
 // Type implements Answer.
@@ -95,14 +100,91 @@ func (a ScoreAnswer) Type() AnswerType { return AnswerScore }
 
 func (a ScoreAnswer) answer() {}
 
+// scoreAnswerWire is the wire shape of a ScoreAnswer: legend and
+// probabilities keyed by level index as a string ("0", "1", ...)
+// rather than held as ordered slices.
+type scoreAnswerWire struct {
+	Score         float64            `json:"score"`
+	Legend        map[string]Content `json:"legend"`
+	Probabilities map[string]float64 `json:"probabilities"`
+	Confidence    float64            `json:"confidence"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler, converting the
+// string-keyed wire maps into Legend and Probabilities ordered by
+// level index.
+func (a *ScoreAnswer) UnmarshalJSON(b []byte) error {
+	var wire scoreAnswerWire
+	if err := json.Unmarshal(b, &wire); err != nil {
+		return err
+	}
+	if len(wire.Legend) != len(wire.Probabilities) {
+		return fmt.Errorf("sys1: score answer: legend has %d levels, probabilities has %d", len(wire.Legend), len(wire.Probabilities))
+	}
+	legend, err := indexedLevels("legend", wire.Legend)
+	if err != nil {
+		return err
+	}
+	probabilities, err := indexedLevels("probabilities", wire.Probabilities)
+	if err != nil {
+		return err
+	}
+
+	a.Score = wire.Score
+	a.Legend = legend
+	a.Probabilities = probabilities
+	a.Confidence = wire.Confidence
+	return nil
+}
+
+// indexedLevels converts a wire map keyed by level index (as a string,
+// "0", "1", ...) into a slice ordered by index. field names the map in
+// error messages. It fails unless the keys are exactly the
+// non-negative integers 0..n-1 with no gaps or duplicates.
+func indexedLevels[T any](field string, m map[string]T) ([]T, error) {
+	n := len(m)
+	out := make([]T, n)
+	seen := make([]bool, n)
+	for k, v := range m {
+		i, err := strconv.Atoi(k)
+		if err != nil || i < 0 {
+			return nil, fmt.Errorf("sys1: score answer: %s has invalid level key %q", field, k)
+		}
+		if i >= n || seen[i] {
+			return nil, fmt.Errorf("sys1: score answer: %s levels are not a contiguous 0..%d range", field, n-1)
+		}
+		seen[i] = true
+		out[i] = v
+	}
+	return out, nil
+}
+
 // MarshalJSON implements json.Marshaler, emitting the "type"
-// discriminator so a Response round-trips.
+// discriminator and the string-keyed legend and probabilities shape,
+// so a Response round-trips.
 func (a ScoreAnswer) MarshalJSON() ([]byte, error) {
-	type plain ScoreAnswer
+	legend := make(map[string]Content, len(a.Legend))
+	for i, v := range a.Legend {
+		legend[strconv.Itoa(i)] = v
+	}
+	probabilities := make(map[string]float64, len(a.Probabilities))
+	for i, v := range a.Probabilities {
+		probabilities[strconv.Itoa(i)] = v
+	}
 	return json.Marshal(struct {
 		Type AnswerType `json:"type"`
-		plain
-	}{AnswerScore, plain(a)})
+		scoreAnswerWire
+	}{AnswerScore, scoreAnswerWire{a.Score, legend, probabilities, a.Confidence}})
+}
+
+// Ranked returns the options ordered from most to least probable,
+// with ties broken by name so the order is deterministic.
+func (a ChoiceAnswer) Ranked() []string {
+	options := slices.Collect(maps.Keys(a.Probabilities))
+	slices.SortFunc(options, func(x, y string) int {
+		return cmp.Or(cmp.Compare(a.Probabilities[y], a.Probabilities[x]), cmp.Compare(x, y))
+	})
+	return options
 }
 
 // Levels reports the number of score levels in the answer's legend.
@@ -112,7 +194,33 @@ func (a ScoreAnswer) Levels() int { return len(a.Legend) }
 // returns 0 if the level is not present, e.g. because the index is out
 // of range.
 func (a ScoreAnswer) Probability(level int) float64 {
-	return a.Probabilities[strconv.Itoa(level)]
+	if level < 0 || level >= len(a.Probabilities) {
+		return 0
+	}
+	return a.Probabilities[level]
+}
+
+// Label returns the description of the given level index from Legend,
+// or nil if the level is not present. It is the level as the question
+// sent it, so a level built with [Levels] comes back as a string.
+func (a ScoreAnswer) Label(level int) Content {
+	if level < 0 || level >= len(a.Legend) {
+		return nil
+	}
+	return a.Legend[level]
+}
+
+// Nearest returns the index of the whole level closest to Score, for
+// callers who want a discrete level rather than the weighted position.
+// The result is clamped to [0, Levels()-1] whenever the answer has any
+// levels, so it is always a valid index even if Score itself lies
+// outside that range. Use Label to read its description.
+func (a ScoreAnswer) Nearest() int {
+	nearest := int(math.Round(a.Score))
+	if n := a.Levels(); n > 0 {
+		nearest = min(max(nearest, 0), n-1)
+	}
+	return nearest
 }
 
 // RawAnswer holds an answer whose "type" this library does not
