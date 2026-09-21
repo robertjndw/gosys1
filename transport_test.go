@@ -76,10 +76,9 @@ func TestCtxCancellationStopsRetriesImmediately(t *testing.T) {
 		attempts.Add(1)
 		writeJSON(w, http.StatusInternalServerError, `{"message": "boom"}`, nil)
 	}).WithRetry(RetryPolicy{
-		MaxRetries:      3,
-		InitialBackoff:  time.Millisecond,
-		MaxBackoff:      time.Millisecond,
-		RetryConnErrors: true,
+		MaxRetries:     3,
+		InitialBackoff: time.Millisecond,
+		MaxBackoff:     time.Millisecond,
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -128,10 +127,60 @@ func TestPerAttemptTimeoutRetried(t *testing.T) {
 		writeJSON(w, http.StatusOK, noulAskResponse, nil)
 	}).
 		WithTimeout(10 * time.Millisecond).
-		WithRetry(RetryPolicy{MaxRetries: 1, InitialBackoff: time.Millisecond, RetryConnErrors: true})
+		WithRetry(RetryPolicy{MaxRetries: 1, InitialBackoff: time.Millisecond})
 	_, err := c.Ask(context.Background(), "state", Noul("q", "q"))
 	if err != nil {
 		t.Fatalf("Ask: %v", err)
+	}
+	if got := attempts.Load(); got != 2 {
+		t.Errorf("server received %d requests, want 2", got)
+	}
+}
+
+func TestPerAttemptTimeoutNotRetriedWhenDisabled(t *testing.T) {
+	var attempts atomic.Int32
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		attempts.Add(1)
+		time.Sleep(100 * time.Millisecond)
+		writeJSON(w, http.StatusOK, noulAskResponse, nil)
+	}).
+		WithTimeout(10 * time.Millisecond).
+		WithRetry(RetryPolicy{MaxRetries: 1, InitialBackoff: time.Millisecond, DisableConnRetries: true})
+	_, err := c.Ask(context.Background(), "state", Noul("q", "q"))
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Ask() error = %v, want context.DeadlineExceeded", err)
+	}
+	if errors.Is(err, ErrRetriesExhausted) {
+		t.Error("error wraps ErrRetriesExhausted despite connection retries being disabled")
+	}
+	if got := attempts.Load(); got != 1 {
+		t.Errorf("server received %d requests, want 1", got)
+	}
+}
+
+// A literal that only sets MaxRetries has to behave like the default
+// policy with that many retries, Retry-After included. Guards the
+// opt-out shape of the boolean fields.
+func TestBarePolicyHonorsRetryAfter(t *testing.T) {
+	var attempts atomic.Int32
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if attempts.Add(1) == 1 {
+			writeJSON(w, http.StatusTooManyRequests, `{"message": "slow down"}`, map[string]string{"Retry-After": "7"})
+			return
+		}
+		writeJSON(w, http.StatusOK, noulAskResponse, nil)
+	}).WithRetry(RetryPolicy{MaxRetries: 1})
+
+	var slept time.Duration
+	c.sleep = func(ctx context.Context, d time.Duration) error {
+		slept = d
+		return nil
+	}
+	if _, err := c.Ask(context.Background(), "state", Noul("q", "q")); err != nil {
+		t.Fatalf("Ask: %v", err)
+	}
+	if slept != 7*time.Second {
+		t.Errorf("retry delay = %v, want the 7s Retry-After hint", slept)
 	}
 	if got := attempts.Load(); got != 2 {
 		t.Errorf("server received %d requests, want 2", got)
@@ -159,7 +208,7 @@ func TestMaxRetriesZeroGivesOneAttempt(t *testing.T) {
 func TestRetriesExhaustedWraps(t *testing.T) {
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, `{"message": "boom"}`, nil)
-	}).WithRetry(RetryPolicy{MaxRetries: 2, InitialBackoff: time.Millisecond, RetryConnErrors: true})
+	}).WithRetry(RetryPolicy{MaxRetries: 2, InitialBackoff: time.Millisecond})
 	_, err := c.Ask(context.Background(), "state", Noul("q", "q"))
 	if !errors.Is(err, ErrRetriesExhausted) {
 		t.Errorf("error = %v, want ErrRetriesExhausted", err)
@@ -181,7 +230,7 @@ func TestBodyResentIdenticallyOnRetry(t *testing.T) {
 			return
 		}
 		writeJSON(w, http.StatusOK, noulAskResponse, nil)
-	}).WithRetry(RetryPolicy{MaxRetries: 2, InitialBackoff: time.Millisecond, RetryConnErrors: true})
+	}).WithRetry(RetryPolicy{MaxRetries: 2, InitialBackoff: time.Millisecond})
 	_, err := c.Ask(context.Background(), "state", Noul("q", "q"))
 	if err != nil {
 		t.Fatalf("Ask: %v", err)

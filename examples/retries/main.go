@@ -21,7 +21,9 @@ func main() {
 	}
 
 	// Built once and reused for every call that should retry this way
-	// instead of the package default.
+	// instead of the package default. Fields left out keep their
+	// defaults: 500ms initial backoff, Retry-After honored, connection
+	// errors retried.
 	client = client.WithRetry(sys1.RetryPolicy{
 		MaxRetries: 3,
 		MaxBackoff: 200 * time.Millisecond,

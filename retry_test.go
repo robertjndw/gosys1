@@ -3,6 +3,7 @@ package sys1
 import (
 	"context"
 	"net/http"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -21,18 +22,55 @@ func TestDefaultRetryPolicy(t *testing.T) {
 	if p.Jitter != 0.25 {
 		t.Errorf("Jitter = %v, want 0.25", p.Jitter)
 	}
-	if !p.RespectRetryAfter {
-		t.Error("RespectRetryAfter = false, want true")
+	if p.IgnoreRetryAfter {
+		t.Error("IgnoreRetryAfter = true, want false")
 	}
 	if p.MaxRetryAfter != 60*time.Second {
 		t.Errorf("MaxRetryAfter = %v, want 60s", p.MaxRetryAfter)
 	}
-	if !p.RetryConnErrors {
-		t.Error("RetryConnErrors = false, want true")
+	if p.DisableConnRetries {
+		t.Error("DisableConnRetries = true, want false")
 	}
 	if p.RetryStatuses != nil {
 		t.Error("RetryStatuses is not nil, want nil (use default)")
 	}
+}
+
+func TestRetryPolicyResolved(t *testing.T) {
+	t.Run("zero durations take the defaults", func(t *testing.T) {
+		got := RetryPolicy{MaxRetries: 5}.resolved()
+		want := RetryPolicy{
+			MaxRetries:     5,
+			InitialBackoff: 500 * time.Millisecond,
+			MaxBackoff:     5 * time.Second,
+			MaxRetryAfter:  60 * time.Second,
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("resolved() = %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("set fields are kept", func(t *testing.T) {
+		p := RetryPolicy{
+			MaxRetries:         1,
+			InitialBackoff:     time.Millisecond,
+			MaxBackoff:         2 * time.Millisecond,
+			Jitter:             0.5,
+			IgnoreRetryAfter:   true,
+			MaxRetryAfter:      3 * time.Millisecond,
+			DisableConnRetries: true,
+		}
+		if got := p.resolved(); !reflect.DeepEqual(got, p) {
+			t.Errorf("resolved() = %+v, want unchanged %+v", got, p)
+		}
+	})
+
+	t.Run("default policy is a fixed point", func(t *testing.T) {
+		p := DefaultRetryPolicy()
+		if got := p.resolved(); !reflect.DeepEqual(got, p) {
+			t.Errorf("resolved() = %+v, want unchanged %+v", got, p)
+		}
+	})
 }
 
 func TestDefaultRetryStatus(t *testing.T) {
@@ -214,10 +252,9 @@ func TestRetryAfterParsing(t *testing.T) {
 
 func TestRetryDelayRespectsMaxRetryAfter(t *testing.T) {
 	p := RetryPolicy{
-		InitialBackoff:    500 * time.Millisecond,
-		MaxBackoff:        5 * time.Second,
-		RespectRetryAfter: true,
-		MaxRetryAfter:     60 * time.Second,
+		InitialBackoff: 500 * time.Millisecond,
+		MaxBackoff:     5 * time.Second,
+		MaxRetryAfter:  60 * time.Second,
 	}
 
 	t.Run("honors Retry-After within bounds", func(t *testing.T) {
@@ -236,9 +273,9 @@ func TestRetryDelayRespectsMaxRetryAfter(t *testing.T) {
 		}
 	})
 
-	t.Run("ignores Retry-After when RespectRetryAfter is false", func(t *testing.T) {
+	t.Run("ignores Retry-After when IgnoreRetryAfter is set", func(t *testing.T) {
 		p2 := p
-		p2.RespectRetryAfter = false
+		p2.IgnoreRetryAfter = true
 		h := http.Header{"Retry-After": []string{"10"}}
 		got := retryDelay(p2, h, 0)
 		if got > p2.MaxBackoff {

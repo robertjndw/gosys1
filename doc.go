@@ -125,11 +125,12 @@
 // [Client.Ask] and [Client.Models] retry retryable failures
 // (408/429/5xx responses, connection errors, per-attempt timeouts)
 // under [RetryPolicy], honoring a server's Retry-After hint. The
-// default, [DefaultRetryPolicy], matches TypeSafe's official SDKs.
-// Configure it client-wide by deriving with [Client.WithRetry], or
-// override it for one call by chaining WithRetry straight onto
-// Ask; a caller's context cancellation always stops retries
-// immediately.
+// default, [DefaultRetryPolicy], matches TypeSafe's official SDKs,
+// and a RetryPolicy literal only needs MaxRetries: zero durations
+// take the defaults and the boolean fields opt out. Configure it
+// client-wide by deriving with [Client.WithRetry], or override it
+// for one call by chaining WithRetry straight onto Ask; a caller's
+// context cancellation always stops retries immediately.
 //
 // # Testing
 //

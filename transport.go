@@ -29,10 +29,10 @@ const requestIDHeader = "x-typesafe-request-id"
 // wrapped with ErrRetriesExhausted, and only when at least one retry
 // was attempted.
 func (c *Client) do(ctx context.Context, method, path string, body []byte, out any) (http.Header, error) {
-	retry := c.retry
-	if err := retry.validate(); err != nil {
+	if err := c.retry.validate(); err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrInvalidRequest, err)
 	}
+	retry := c.retry.resolved()
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -58,7 +58,7 @@ func (c *Client) do(ctx context.Context, method, path string, body []byte, out a
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
-			retryable, reason = retry.RetryConnErrors, last.err.Error()
+			retryable, reason = !retry.DisableConnRetries, last.err.Error()
 		case last.status >= 200 && last.status < 300:
 			if err := json.Unmarshal(last.body, out); err != nil {
 				return nil, fmt.Errorf("%w: %w", ErrInvalidResponse, err)

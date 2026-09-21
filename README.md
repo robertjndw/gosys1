@@ -159,22 +159,22 @@ Precedence is explicit option, then environment variable, then default. A blank 
 | `MaxBackoff` | 5s |
 | `Jitter` | 0.25 |
 | `RetryStatuses` | nil, meaning 408, 429 and any 5xx |
-| `RespectRetryAfter` | true |
+| `IgnoreRetryAfter` | false, so `Retry-After` is honored |
 | `MaxRetryAfter` | 60s |
-| `RetryConnErrors` | true |
+| `DisableConnRetries` | false, so connection errors are retried |
 
 Retried: 408, 429, any 5xx status and connection errors. A caller's context cancellation stops retries immediately, and the caller's context is the total time budget across every attempt and backoff, not just `WithTimeout`, which bounds a single HTTP round trip.
 
-Override client-wide:
+Only `MaxRetries` needs setting. A zero duration takes the default from the table, and the boolean fields opt out of behavior that is on by default, so a literal is the default policy plus whatever you change. `Jitter` is the exception: 0 means no jitter. Override client-wide:
 
 ```go
 client = client.WithRetry(sys1.RetryPolicy{MaxRetries: 5})
 ```
 
-Override per use:
+Override per use, here switching retries off:
 
 ```go
-resp, err := client.WithRetry(sys1.RetryPolicy{MaxRetries: 0}).Ask(ctx, state,
+resp, err := client.WithRetry(sys1.RetryPolicy{}).Ask(ctx, state,
 	sys1.Noul("billing", "Is this about a billing issue?"),
 )
 ```
