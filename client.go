@@ -40,9 +40,10 @@ type Client struct {
 //   - TYPESAFE_API_KEY: the API key (required unless WithAPIKey is given)
 //   - TYPESAFE_BASE_URL: the API base URL, default DefaultBaseURL
 //   - TYPESAFE_DEFAULT_MODEL: the default model, default DefaultModel
-//   - TYPESAFE_LOG_LEVEL: debug, info, warning, error or off; when set
-//     to anything but off, requests are logged to stderr at that level
-//     and above (see WithLogger). Unset or off disables logging.
+//   - TYPESAFE_LOG_LEVEL: debug, info, warning (or warn), error or off;
+//     when set to anything but off, requests are logged to stderr at
+//     that level and above (see WithLogger). Unset or off disables
+//     logging.
 //
 // New makes no network call. It returns ErrMissingAPIKey if no API key
 // is available, or an error if the base URL, the log level or an

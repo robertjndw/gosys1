@@ -144,7 +144,7 @@ Environment variables read by `New`:
 | `TYPESAFE_API_KEY` | API key sent as a bearer token | none, required |
 | `TYPESAFE_BASE_URL` | API base URL | `https://api.typesafe.ai` |
 | `TYPESAFE_DEFAULT_MODEL` | default model for `Ask` and the shortcuts | `jev-latest` |
-| `TYPESAFE_LOG_LEVEL` | `debug`, `info`, `warning`, `error` or `off`; logs to stderr at that level | unset, no logging |
+| `TYPESAFE_LOG_LEVEL` | `debug`, `info`, `warning` (or `warn`), `error` or `off`; logs to stderr at that level | unset, no logging |
 
 Precedence is explicit option, then environment variable, then default. A blank or whitespace-only environment variable is treated as unset. `debug` logs every attempt; `info` logs each scheduled retry. `TYPESAFE_DEFAULT_MODEL` sets the model at `New` time; to change it in code instead, derive with `client.WithModel(...)`.
 
@@ -158,6 +158,7 @@ Precedence is explicit option, then environment variable, then default. A blank 
 | `InitialBackoff` | 500ms |
 | `MaxBackoff` | 5s |
 | `Jitter` | 0.25 |
+| `RetryStatuses` | nil, meaning 408, 429 and any 5xx |
 | `RespectRetryAfter` | true |
 | `MaxRetryAfter` | 60s |
 | `RetryConnErrors` | true |

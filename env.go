@@ -75,6 +75,6 @@ func parseLogLevel(v string) (slog.Level, bool, error) {
 	case "off":
 		return 0, false, nil
 	default:
-		return 0, false, fmt.Errorf("sys1: %s: unknown log level %q (want debug, info, warning, error or off)", EnvLogLevel, v)
+		return 0, false, fmt.Errorf("sys1: %s: unknown log level %q (want debug, info, warning, warn, error or off)", EnvLogLevel, v)
 	}
 }

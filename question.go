@@ -68,7 +68,7 @@ type NoulCriteria struct {
 // clarify what counts as yes or no.
 //
 // For a one-shot call that skips Ask and the Answers map, see
-// Client.Noul.
+// [Client.Noul].
 func Noul(name string, instructions Content) NoulQuestion {
 	return NoulQuestion{Name: name, Instructions: instructions}
 }
@@ -134,7 +134,7 @@ func Choices(names ...string) ChoiceCriteria {
 // Choice builds a choice question named name over the given options.
 //
 // For a one-shot call that skips Ask and the Answers map, see
-// Client.Choice.
+// [Client.Choice].
 func Choice(name string, instructions Content, criteria ChoiceCriteria) ChoiceQuestion {
 	return ChoiceQuestion{Name: name, Instructions: instructions, Criteria: criteria}
 }

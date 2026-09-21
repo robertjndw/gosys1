@@ -27,8 +27,9 @@ func main() {
 		MaxBackoff: 200 * time.Millisecond,
 	})
 
-	// The context is the total budget across every attempt and retry;
-	// WithRetry only bounds each individual backoff.
+	// The context is the total budget across every attempt and retry.
+	// WithTimeout only bounds a single attempt, and the policy's
+	// MaxBackoff only bounds a single wait between attempts.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
