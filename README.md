@@ -2,6 +2,8 @@
 
 Go client for TypeSafe's SystemOne API (https://docs.typesafe.ai/api), standard library only.
 
+This is an independent, community-maintained client. It is not affiliated with or endorsed by TypeSafe; for the official SDKs see https://docs.typesafe.ai.
+
 ## Install
 
 ```sh

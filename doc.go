@@ -3,6 +3,9 @@
 // plus one or more typed questions, and get back structured,
 // typed answers instead of hand-written JSON.
 //
+// This is an independent, community-maintained client, not affiliated
+// with or endorsed by TypeSafe.
+//
 // # Construction
 //
 // [New] reads the TYPESAFE_* environment variables the official SDKs
