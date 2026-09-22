@@ -10,7 +10,7 @@ import (
 // values sent to the API. It is documented as string, map[string]any,
 // []any, or a struct that marshals to one of those; nil is allowed for
 // optional values such as a choice description or a criteria side, but
-// Ask rejects a nil state.
+// Ask rejects a nil, bool or number state.
 type Content any
 
 // QuestionType identifies which of the three question shapes a

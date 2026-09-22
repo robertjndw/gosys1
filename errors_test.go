@@ -68,6 +68,7 @@ func TestAPIErrorIs(t *testing.T) {
 		status  int
 		sentime error
 	}{
+		{400, ErrBadRequest},
 		{401, ErrUnauthorized},
 		{403, ErrForbidden},
 		{404, ErrNotFound},

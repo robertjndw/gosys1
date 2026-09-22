@@ -25,6 +25,9 @@ var (
 	// caught before any network call is made.
 	ErrInvalidRequest = errors.New("sys1: invalid request")
 
+	// ErrBadRequest corresponds to HTTP 400.
+	ErrBadRequest = errors.New("sys1: bad request")
+
 	// ErrUnauthorized corresponds to HTTP 401: the API key is missing
 	// or invalid.
 	ErrUnauthorized = errors.New("sys1: unauthorized")
@@ -134,6 +137,7 @@ const statusOverloaded = 529
 // statusSentinels maps each status code with a dedicated sentinel to
 // it. Any other 5xx status maps to ErrServer in APIError.Is.
 var statusSentinels = map[int]error{
+	http.StatusBadRequest:          ErrBadRequest,
 	http.StatusUnauthorized:        ErrUnauthorized,
 	http.StatusForbidden:           ErrForbidden,
 	http.StatusNotFound:            ErrNotFound,

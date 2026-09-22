@@ -164,6 +164,51 @@ func TestAnswersAccessors(t *testing.T) {
 	})
 }
 
+func TestAnswersTypeViews(t *testing.T) {
+	answers := Answers{
+		"noul_a":  NoulAnswer{Noul: 0.1},
+		"noul_b":  NoulAnswer{Noul: 0.9},
+		"choice":  ChoiceAnswer{Choice: "a", Probabilities: map[string]float64{"a": 1}, Confidence: 1},
+		"score":   ScoreAnswer{Score: 1, Legend: []Content{"a"}, Probabilities: []float64{1}, Confidence: 1},
+		"unknown": RawAnswer{Kind: "sentiment", Data: json.RawMessage(`{"type":"sentiment"}`)},
+	}
+
+	nouls := answers.NoulAnswers()
+	wantNouls := map[string]NoulAnswer{"noul_a": {Noul: 0.1}, "noul_b": {Noul: 0.9}}
+	if !reflect.DeepEqual(nouls, wantNouls) {
+		t.Errorf("NoulAnswers() = %+v, want %+v", nouls, wantNouls)
+	}
+
+	choices := answers.ChoiceAnswers()
+	wantChoices := map[string]ChoiceAnswer{"choice": answers["choice"].(ChoiceAnswer)}
+	if !reflect.DeepEqual(choices, wantChoices) {
+		t.Errorf("ChoiceAnswers() = %+v, want %+v", choices, wantChoices)
+	}
+
+	scores := answers.ScoreAnswers()
+	wantScores := map[string]ScoreAnswer{"score": answers["score"].(ScoreAnswer)}
+	if !reflect.DeepEqual(scores, wantScores) {
+		t.Errorf("ScoreAnswers() = %+v, want %+v", scores, wantScores)
+	}
+
+	// Mutating a returned map must not reach back into answers.
+	nouls["noul_a"] = NoulAnswer{Noul: 0.5}
+	if got, _ := answers.Noul("noul_a"); got.Noul != 0.1 {
+		t.Errorf("answers[noul_a].Noul = %v after mutating the view, want unchanged 0.1", got.Noul)
+	}
+
+	empty := Answers{}
+	if got := empty.NoulAnswers(); got == nil || len(got) != 0 {
+		t.Errorf("NoulAnswers() on empty Answers = %v, want empty non-nil map", got)
+	}
+	if got := empty.ChoiceAnswers(); got == nil || len(got) != 0 {
+		t.Errorf("ChoiceAnswers() on empty Answers = %v, want empty non-nil map", got)
+	}
+	if got := empty.ScoreAnswers(); got == nil || len(got) != 0 {
+		t.Errorf("ScoreAnswers() on empty Answers = %v, want empty non-nil map", got)
+	}
+}
+
 func TestResponseRoundTrip(t *testing.T) {
 	original := Response{
 		Model: "jev-1.13.0",

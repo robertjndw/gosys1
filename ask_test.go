@@ -201,6 +201,66 @@ func TestAskValidatesLocallyBeforeNetworkCall(t *testing.T) {
 	}
 }
 
+func TestAskRejectsScalarState(t *testing.T) {
+	n := 42
+	var nilStr *string
+	tests := []struct {
+		name  string
+		state Content
+	}{
+		{"int", 42},
+		{"float64", 3.14},
+		{"bool", true},
+		{"pointer to int", &n},
+		{"nil pointer", nilStr},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			called := false
+			c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+				called = true
+				writeJSON(w, http.StatusOK, noulAskResponse, nil)
+			})
+			_, err := c.Ask(context.Background(), tt.state, Noul("q", "q"))
+			if !errors.Is(err, ErrInvalidRequest) {
+				t.Errorf("Ask() error = %v, want ErrInvalidRequest", err)
+			}
+			if called {
+				t.Error("server was called despite a scalar state")
+			}
+		})
+	}
+}
+
+func TestAskAcceptsNonScalarState(t *testing.T) {
+	tests := []struct {
+		name  string
+		state Content
+	}{
+		{"string", "state"},
+		{"map", map[string]any{"a": 1}},
+		{"slice", []any{"a", "b"}},
+		{"struct", struct{ A string }{"a"}},
+		{"json.Marshaler over a scalar kind", customLevel(3)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			called := false
+			c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+				called = true
+				writeJSON(w, http.StatusOK, noulAskResponse, nil)
+			})
+			_, err := c.Ask(context.Background(), tt.state, Noul("q", "q"))
+			if err != nil {
+				t.Fatalf("Ask() error = %v, want nil", err)
+			}
+			if !called {
+				t.Error("server was not called for a valid state")
+			}
+		})
+	}
+}
+
 func TestClientShortcuts(t *testing.T) {
 	t.Run("Noul", func(t *testing.T) {
 		var gotQuestions map[string]any

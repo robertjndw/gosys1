@@ -96,9 +96,12 @@
 // probability of yes. [Answers.Choice] returns a [ChoiceAnswer] whose
 // Ranked method lists the options most probable first. [Answers.Score]
 // returns a [ScoreAnswer]; its Nearest and Label methods turn the weighted
-// position into a discrete level and its description. Keep the
-// thresholds that act on these values in your own code, so policy can
-// change without re-running inference.
+// position into a discrete level and its description.
+// [Answers.NoulAnswers], [Answers.ChoiceAnswers] and
+// [Answers.ScoreAnswers] return every answer of one type keyed by
+// name, for a battery built at runtime. Keep the thresholds that act
+// on these values in your own code, so policy can change without
+// re-running inference.
 //
 // # Error handling
 //
@@ -115,10 +118,10 @@
 //		// caught locally before any network call
 //	}
 //
-// Client-side validation failures (no questions, a blank or duplicate
-// question name, a Score question with one level, a Choice question
-// with 256 options, ...) wrap [ErrInvalidRequest] and never reach the
-// network.
+// Client-side validation failures (no questions, a bool or number
+// state, a blank or duplicate question name, a Score question with
+// one level, a Choice question with 256 options, ...) wrap
+// [ErrInvalidRequest] and never reach the network.
 //
 // # Retries
 //

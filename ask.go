@@ -3,10 +3,12 @@ package sys1
 import (
 	"bytes"
 	"context"
+	"encoding"
 	"encoding/json"
 	"fmt"
 	"maps"
 	"net/http"
+	"reflect"
 	"strings"
 )
 
@@ -42,10 +44,10 @@ type Usage struct {
 // Ask validates state, the questions and the client's model
 // before making any network call, returning an error wrapping
 // ErrInvalidRequest for a problem it can catch locally: a nil state,
-// zero questions, a nil question, a blank or duplicate question name,
-// a question whose own limits are violated (see each question type),
-// an empty model, or a WithExtraBody field that collides with a
-// built-in request field.
+// a bool or number state, zero questions, a nil question, a blank or
+// duplicate question name, a question whose own limits are violated
+// (see each question type), an empty model, or a WithExtraBody field
+// that collides with a built-in request field.
 func (c *Client) Ask(ctx context.Context, state Content, questions ...Question) (*Response, error) {
 	qmap, err := collectQuestions(questions)
 	if err != nil {
@@ -106,8 +108,8 @@ func collectQuestions(questions []Question) (map[string]Question, error) {
 
 // validateAsk checks Ask's inputs before any network call.
 func validateAsk(state Content, questions map[string]Question, model string) error {
-	if state == nil {
-		return fmt.Errorf("%w: state must not be nil", ErrInvalidRequest)
+	if err := validateState(state); err != nil {
+		return err
 	}
 	if len(questions) == 0 {
 		return fmt.Errorf("%w: at least one question is required", ErrInvalidRequest)
@@ -119,6 +121,40 @@ func validateAsk(state Content, questions map[string]Question, model string) err
 	}
 	if strings.TrimSpace(model) == "" {
 		return fmt.Errorf("%w: model must not be empty", ErrInvalidRequest)
+	}
+	return nil
+}
+
+// validateState rejects a state the API would refuse as a root value:
+// nil (including a nil pointer at any depth) or a JSON scalar other
+// than a string, which is a bool or a number. A type implementing
+// json.Marshaler or encoding.TextMarshaler is exempt regardless of its
+// underlying kind, since it may render as a string or object on the
+// wire.
+func validateState(state Content) error {
+	if state == nil {
+		return fmt.Errorf("%w: state must not be nil", ErrInvalidRequest)
+	}
+	if _, ok := state.(json.Marshaler); ok {
+		return nil
+	}
+	if _, ok := state.(encoding.TextMarshaler); ok {
+		return nil
+	}
+	v := reflect.ValueOf(state)
+	for v.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			return fmt.Errorf("%w: state must not be nil", ErrInvalidRequest)
+		}
+		v = v.Elem()
+	}
+	switch v.Kind() {
+	case reflect.Bool,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Float32, reflect.Float64,
+		reflect.Complex64, reflect.Complex128:
+		return fmt.Errorf("%w: state must be a string, object or array, got %v", ErrInvalidRequest, v.Kind())
 	}
 	return nil
 }

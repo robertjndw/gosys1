@@ -7,7 +7,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
+	"slices"
 
 	sys1 "github.com/robertjndw/gosys1"
 )
@@ -42,13 +44,9 @@ func main() {
 	// The threshold lives here, in code, so it can change without
 	// re-running inference.
 	const threshold = 0.5
-	for name := range labels {
-		answer, err := resp.Answers.Noul(name)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "sys1:", err)
-			os.Exit(1)
-		}
-		if answer.Noul >= threshold {
+	nouls := resp.Answers.NoulAnswers()
+	for _, name := range slices.Sorted(maps.Keys(nouls)) {
+		if answer := nouls[name]; answer.Noul >= threshold {
 			fmt.Printf("%-9s %.2f\n", name, answer.Noul)
 		}
 	}

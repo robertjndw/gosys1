@@ -3,6 +3,7 @@ package sys1
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -103,4 +104,12 @@ func mustDecodeAnswers(t *testing.T, body string) Answers {
 		t.Fatalf("Unmarshal: %v", err)
 	}
 	return answers
+}
+
+// customLevel is an int that marshals to a string, so validateState
+// has to let it through despite its kind.
+type customLevel int
+
+func (c customLevel) MarshalJSON() ([]byte, error) {
+	return json.Marshal(fmt.Sprintf("level-%d", c))
 }

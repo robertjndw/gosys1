@@ -89,6 +89,29 @@ urgencyAnswer, err := client.Score(ctx, state, "How urgent is this message?", sy
 
 `Noul`, `Choice` and `Score` all return their answer struct directly, skipping the `Answers` map. `resp.Model`, `resp.Usage` and `resp.RequestID` are only available through `Ask`.
 
+## Structured state
+
+State is anything that marshals to a JSON string, object or array. TypeSafe recommends an object so each part of the state has a name, and a plain struct with `json` tags does the job. A bare bool or number is rejected locally with `ErrInvalidRequest`.
+
+```go
+type message struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+state := struct {
+	Tier     string    `json:"tier"`
+	Messages []message `json:"messages"`
+}{
+	Tier: "enterprise",
+	Messages: []message{
+		{Role: "user", Content: "I was charged twice."},
+	},
+}
+
+resp, err := client.Ask(ctx, state, sys1.Noul("billing", "Is this about a billing issue?"))
+```
+
 ## Reading answers
 
 ```go
@@ -106,6 +129,14 @@ prob := s.Probability(level)           // its probability
 `ScoreAnswer.Legend` and `ScoreAnswer.Probabilities` are slices ordered by level, lowest first, so `s.Legend[level]` and `s.Probabilities[level]` line up with each other and with `s.Nearest()`.
 
 A missing name returns an error wrapping `ErrNoAnswer`, and reading an answer as the wrong type returns one wrapping `ErrAnswerType`; neither panics. Ranging over `resp.Answers` directly gives the concrete `NoulAnswer`, `ChoiceAnswer`, `ScoreAnswer` or `RawAnswer` values for a type switch.
+
+`Answers.NoulAnswers()`, `Answers.ChoiceAnswers()` and `Answers.ScoreAnswers()` return every answer of one type keyed by name, which is handy for a battery built at runtime:
+
+```go
+for label, answer := range resp.Answers.NoulAnswers() {
+	fmt.Printf("%s: %.2f\n", label, answer.Noul)
+}
+```
 
 Keep the thresholds that act on these values in your own code. The model reports what it found; your policy decides what to do about it, and can change without re-running inference.
 
@@ -195,7 +226,7 @@ case errors.As(err, &apiErr):
 }
 ```
 
-Sentinel errors for `errors.Is`: `ErrMissingAPIKey`, `ErrInvalidRequest`, `ErrUnauthorized`, `ErrForbidden`, `ErrNotFound`, `ErrUnprocessable`, `ErrRateLimited`, `ErrOverloaded`, `ErrServer`, `ErrNoAnswer`, `ErrAnswerType`, `ErrInvalidResponse` and `ErrRetriesExhausted`. `APIError.Is` maps a response's status code onto the matching sentinel, so callers never compare status codes by hand.
+Sentinel errors for `errors.Is`: `ErrMissingAPIKey`, `ErrInvalidRequest`, `ErrBadRequest`, `ErrUnauthorized`, `ErrForbidden`, `ErrNotFound`, `ErrUnprocessable`, `ErrRateLimited`, `ErrOverloaded`, `ErrServer`, `ErrNoAnswer`, `ErrAnswerType`, `ErrInvalidResponse` and `ErrRetriesExhausted`. `APIError.Is` maps a response's status code onto the matching sentinel, so callers never compare status codes by hand.
 
 A 422 response fills `APIError.Details` with `[]ValidationError`, one per invalid field. Each has `Msg`, `Type` and a `Path()` method that renders `Loc` as a dotted path, such as `questions.urgency.criteria`.
 
@@ -209,7 +240,7 @@ A 422 response fills `APIError.Details` with `[]ValidationError`, one per invali
 |---|---|
 | `examples/basic` | One `Ask` call with the guide's billing example: `Noul` billing, `Choice` tone, `Score` urgency, read with the typed accessors |
 | `examples/shortcuts` | The same three questions asked through `client.Noul`, `client.Choice` and `client.Score` |
-| `examples/labels` | A battery built at runtime, one `Noul` per label, sent as a `[]sys1.Question` spread with `questions...` |
+| `examples/labels` | A battery built at runtime, one `Noul` per label, sent as a `[]sys1.Question` spread with `questions...` and read back with `Answers.NoulAnswers()` |
 | `examples/typed` | Decoding answers into a caller-owned struct instead of touching the `Answers` map directly |
 | `examples/models` | `client.Models`, plus `client.WithModel` to pick a specific version, both built once and reused and chained onto a single call |
 | `examples/retries` | A client-wide `RetryPolicy` built once with `WithRetry`, a one-off chained override, and a `context.WithTimeout` as the total budget |

@@ -339,3 +339,34 @@ func (a Answers) Choice(name string) (ChoiceAnswer, error) {
 func (a Answers) Score(name string) (ScoreAnswer, error) {
 	return answerAs[ScoreAnswer](a, name)
 }
+
+// answersOf copies the entries of a whose answer is a T into a fresh
+// map, so the typed views below never alias a and never return nil.
+func answersOf[T Answer](a Answers) map[string]T {
+	out := make(map[string]T)
+	for name, ans := range a {
+		if v, ok := ans.(T); ok {
+			out[name] = v
+		}
+	}
+	return out
+}
+
+// NoulAnswers returns every NoulAnswer in a, keyed by question name.
+// It suits a battery built at runtime, such as one Noul per label,
+// where ranging over all of them beats a Noul lookup per name.
+func (a Answers) NoulAnswers() map[string]NoulAnswer {
+	return answersOf[NoulAnswer](a)
+}
+
+// ChoiceAnswers returns every ChoiceAnswer in a, keyed by question
+// name. See NoulAnswers.
+func (a Answers) ChoiceAnswers() map[string]ChoiceAnswer {
+	return answersOf[ChoiceAnswer](a)
+}
+
+// ScoreAnswers returns every ScoreAnswer in a, keyed by question name.
+// See NoulAnswers.
+func (a Answers) ScoreAnswers() map[string]ScoreAnswer {
+	return answersOf[ScoreAnswer](a)
+}
