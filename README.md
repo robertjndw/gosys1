@@ -1,6 +1,9 @@
 # gosys1
 
-Go client for TypeSafe's SystemOne API (https://docs.typesafe.ai/api), standard library only.
+[![Go Reference](https://pkg.go.dev/badge/github.com/robertjndw/gosys1.svg)](https://pkg.go.dev/github.com/robertjndw/gosys1)
+[![CI](https://github.com/robertjndw/gosys1/actions/workflows/ci.yml/badge.svg)](https://github.com/robertjndw/gosys1/actions/workflows/ci.yml)
+
+gosys1 is a Go client for [TypeSafe's SystemOne API](https://docs.typesafe.ai/api). You send a piece of content as state plus one or more typed questions (yes/no, multiple choice or a graded score) and get back structured, typed answers instead of parsing JSON by hand. It uses only the Go standard library and comes with retries, typed errors and configuration through the same `TYPESAFE_*` environment variables as the official SDKs.
 
 This is an independent, community-maintained client. It is not affiliated with or endorsed by TypeSafe; for the official SDKs see https://docs.typesafe.ai.
 
